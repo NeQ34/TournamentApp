@@ -15,7 +15,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    public void register(RegisterRequest request) {
+    public User register(RegisterRequest request) {
 
         if (userRepository.existsByEmail(request.email())) {
             throw new RuntimeException("Email already exists");
@@ -28,8 +28,21 @@ public class AuthService {
         user.setEmail(request.email());
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setWantsAdmin(request.isCaptain());
-        user.setRole("USER");
+        user.setRole(request.isCaptain() ? "ADMIN" : "USER");
 
-        userRepository.save(user);
+        return userRepository.save(user);
+    }
+
+    public User login(String email, String password){
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("Nieprawidlowy email lub haslo"));
+
+        if(!passwordEncoder.matches(password, user.getPassword())){
+            throw new RuntimeException("Nieprawidlowy email lub haslo");
+        }
+        return user;
+    }
+
+    public boolean checkEmailExists(String email){
+        return userRepository.existsByEmail(email);
     }
 }

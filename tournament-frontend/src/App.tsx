@@ -9,6 +9,7 @@ import AdminPanelPage from "./pages/AdminPanelPage";
 import Navbar from "./components/Navbar";
 import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
+import UserPanel from "./pages/UserPanel";
 
 function App() {
     return (
@@ -24,7 +25,7 @@ function App() {
                 <Route path="/admin" element={<AdminPanelPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/login" element={<LoginPage />} />
-
+                <Route path="/panel" element={<UserPanel />} />
             </Routes>
         </>
     );

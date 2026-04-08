@@ -27,7 +27,9 @@ public class User {
 
     private String password;
 
-    private boolean wantsAdmin;
+    private Boolean wantsAdmin;
 
     private String role; // USER, ADMIN, SUPERADMIN
+
+
 }
