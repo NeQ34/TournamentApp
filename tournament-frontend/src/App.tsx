@@ -10,6 +10,7 @@ import Navbar from "./components/Navbar";
 import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
 import UserPanel from "./pages/UserPanel";
+import AdminPanel from "./pages/AdminPanel.tsx";
 
 function App() {
     return (
@@ -26,6 +27,7 @@ function App() {
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/panel" element={<UserPanel />} />
+                <Route path="/panel" element={<AdminPanel />} />
             </Routes>
         </>
     );
