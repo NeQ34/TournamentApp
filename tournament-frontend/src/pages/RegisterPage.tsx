@@ -136,7 +136,7 @@ const RegisterPage = () => {
             setSuccessMessage("Rejestracja zakończona pomyślnie!");
             
             setTimeout(() => {
-                navigate("/panel");
+                navigate("/userpanel");
             }, 1500);
             
             reset();

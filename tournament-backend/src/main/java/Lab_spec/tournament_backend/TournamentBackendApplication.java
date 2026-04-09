@@ -9,5 +9,5 @@ public class TournamentBackendApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(TournamentBackendApplication.class, args);
 	}
-
+    
 }

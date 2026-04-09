@@ -59,10 +59,16 @@ const LoginPage = () => {
       if (response.ok) {
         if (responseData.user) {
           localStorage.setItem("user", JSON.stringify(responseData.user));
+
+          if (responseData.user.role === "admin") {
+            navigate("/adminpanel");
+        } else {
+            navigate("/userpanel");
+        }
+
           console.log("Zalogowano:", responseData.user);
         }
         
-        navigate("/panel");
       } else {
         if (responseData.message === "Invalid email or password") {
           setError("email", {

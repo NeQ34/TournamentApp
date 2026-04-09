@@ -1,199 +1,388 @@
-
-import { Box, Container, Paper, Typography, Button, Avatar, Chip } from "@mui/material";
+// src/pages/UserPanel.tsx
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import {
+  Box,
+  Drawer,
+  AppBar,
+  Toolbar,
+  Typography,
+  IconButton,
+  Avatar,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Container,
+  Paper,
+} from "@mui/material";
+import {
+  Dashboard as DashboardIcon,
+  EmojiEvents as TournamentIcon,
+  Grid3x3 as BracketIcon,
+  CalendarMonth as CalendarIcon,
+  Groups as TeamsIcon,
+  Archive as ArchiveIcon,
+  Person as ProfileIcon,
+  Logout as LogoutIcon,
+  Menu as MenuIcon,
+} from "@mui/icons-material";
 import backgroundImage from "../photos/img2.jpg";
 
-type UserData = {
-    firstName: string;
-    lastName: string;
-    email: string;
-    role: string;
-};
+const drawerWidth = 280;
 
 const UserPanel = () => {
-    const navigate = useNavigate();
-    const [userData, setUserData] = useState<UserData | null>(null);
-    const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [selectedTab, setSelectedTab] = useState("dashboard");
 
-    useEffect(() => {
-        const storedUser = localStorage.getItem("user");
-        console.log("Dane z localStorage:", storedUser);
-        
-        if (storedUser) {
-            try {
-                const parsedUser = JSON.parse(storedUser);
-                setUserData(parsedUser);
-                console.log("Sparsowane dane:", parsedUser);
-            } catch (error) {
-                console.error("Błąd parsowania danych:", error);
-                localStorage.removeItem("user");
-            }
-        }
-        setLoading(false);
-    }, []);
+  const userDataRaw = localStorage.getItem("user");
+  const userData = userDataRaw ? JSON.parse(userDataRaw) : null;
 
-    useEffect(() => {
-        if (!loading && !userData) {
-            console.log("Brak danych - przekierowanie do rejestracji");
-            navigate("/register");
-        }
-    }, [loading, userData, navigate]);
 
-    const handleLogout = () => {
-        localStorage.removeItem("user");
-        navigate("/register");
-    };
+  if (!userData) {
+    navigate("/login");
+    return null;
+  }
 
-    const getRoleColor = (role: string) => {
-        return role === "admin" ? "#FF6A00" : "#4caf50";
-    };
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
-    const getRoleLabel = (role: string) => {
-        return role === "admin" ? "Administrator" : "Zwykły użytkownik";
-    };
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
 
-    if (loading) {
+  const menuItems = [
+    { id: "dashboard", label: "Dashboard", icon: <DashboardIcon /> },
+    { id: "tournaments", label: "Turnieje", icon: <TournamentIcon /> },
+    { id: "brackets", label: "Drabinki i tabele", icon: <BracketIcon /> },
+    { id: "calendar", label: "Kalendarz", icon: <CalendarIcon /> },
+    { id: "teams", label: "Drużyny", icon: <TeamsIcon /> },
+    { id: "archive", label: "Archiwum", icon: <ArchiveIcon /> },
+    { id: "profile", label: "Mój profil", icon: <ProfileIcon /> },
+  ];
+
+  const renderContent = () => {
+    switch (selectedTab) {
+      case "dashboard":
         return (
-            <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Typography>Ładowanie panelu...</Typography>
-            </Box>
-        );
-    }
-
-    if (!userData) {
-        return (
-            <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Typography>Brak danych użytkownika. Przekierowywanie...</Typography>
-            </Box>
-        );
-    }
-
-    return (
-        <Box
+          <Paper
+            elevation={8}
             sx={{
-                minHeight: "100vh",
-                backgroundImage: `url(${backgroundImage})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                backgroundRepeat: "no-repeat",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                p: 2,
+              p: 4,
+              borderRadius: 4,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              color: "#fff",
             }}
+          >
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Witaj, {userData.firstName} {userData.lastName}!
+            </Typography>
+          </Paper>
+        );
+      case "tournaments":
+        return (
+          <Paper
+            elevation={8}
+            sx={{
+              p: 4,
+              borderRadius: 4,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              color: "#fff",
+            }}
+          >
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Turnieje
+            </Typography>
+          </Paper>
+        );
+      case "brackets":
+        return (
+          <Paper
+            elevation={8}
+            sx={{
+              p: 4,
+              borderRadius: 4,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              color: "#fff",
+            }}
+          >
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Drabinki i tabele
+            </Typography>
+          </Paper>
+        );
+      case "calendar":
+        return (
+          <Paper
+            elevation={8}
+            sx={{
+              p: 4,
+              borderRadius: 4,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              color: "#fff",
+            }}
+          >
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Kalendarz
+            </Typography>
+          </Paper>
+        );
+      case "teams":
+        return (
+          <Paper
+            elevation={8}
+            sx={{
+              p: 4,
+              borderRadius: 4,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              color: "#fff",
+            }}
+          >
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Drużyny
+            </Typography>
+          </Paper>
+        );
+      case "archive":
+        return (
+          <Paper
+            elevation={8}
+            sx={{
+              p: 4,
+              borderRadius: 4,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              color: "#fff",
+            }}
+          >
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Archiwum
+            </Typography>
+          </Paper>
+        );
+      case "profile":
+        return (
+          <Paper
+            elevation={8}
+            sx={{
+              p: 4,
+              borderRadius: 4,
+              backgroundColor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              color: "#fff",
+            }}
+          >
+            <Typography variant="h4" fontWeight={700} gutterBottom>
+              Mój profil
+            </Typography>
+          </Paper>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const drawer = (
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      {}
+      <Box sx={{ p: 3, textAlign: "center" }}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: "bold",
+            color: "#FF6A00",
+            letterSpacing: 1,
+          }}
         >
-            <Container maxWidth="md">
-                <Paper
-                    elevation={8}
-                    sx={{
-                        p: 4,
-                        borderRadius: 4,
-                        backgroundColor: "rgba(0,0,0,0.7)",
-                        backdropFilter: "blur(6px)",
-                        color: "#fff",
-                    }}
-                >
-                    {}
-                    <Box display="flex" alignItems="center" gap={3} mb={4}>
-                        <Avatar
-                            sx={{
-                                width: 80,
-                                height: 80,
-                                bgcolor: "#FF6A00",
-                                fontSize: 32,
-                            }}
-                        >
-                            {userData.firstName?.[0] || "?"}{userData.lastName?.[0] || "?"}
-                        </Avatar>
-                        <Box>
-                            <Typography variant="h4" fontWeight={700}>
-                                Witaj, {userData.firstName} {userData.lastName}!
-                            </Typography>
-                            <Chip
-                                label={getRoleLabel(userData.role)}
-                                sx={{
-                                    mt: 1,
-                                    bgcolor: getRoleColor(userData.role),
-                                    color: "#fff",
-                                    fontWeight: "bold",
-                                }}
-                            />
-                        </Box>
-                    </Box>
+          Tournament<span style={{ color: "#fff" }}>App</span>
+        </Typography>
+        <Typography variant="caption" sx={{ color: "#aaa" }}>
+          Panel użytkownika
+        </Typography>
+      </Box>
 
-                    {}
-                    <Box sx={{ mt: 4 }}>
-                        <Typography variant="h6" gutterBottom sx={{ color: "#FF6A00" }}>
-                            Twoje dane:
-                        </Typography>
-                        
-                        <Paper
-                            elevation={2}
-                            sx={{
-                                p: 3,
-                                mt: 2,
-                                bgcolor: "rgba(255,255,255,0.1)",
-                                borderRadius: 2,
-                            }}
-                        >
-                            <Box display="flex" flexDirection="column" gap={2}>
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ color: "#ccc" }}>
-                                        Imię i nazwisko
-                                    </Typography>
-                                    <Typography variant="body1" sx={{ fontWeight: "bold" }}>
-                                        {userData.firstName} {userData.lastName}
-                                    </Typography>
-                                </Box>
-                                
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ color: "#ccc" }}>
-                                        Adres email
-                                    </Typography>
-                                    <Typography variant="body1" sx={{ fontWeight: "bold" }}>
-                                        {userData.email}
-                                    </Typography>
-                                </Box>
-                                
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ color: "#ccc" }}>
-                                        Rola w systemie
-                                    </Typography>
-                                    <Typography variant="body1" sx={{ fontWeight: "bold" }}>
-                                        {userData.role === "admin" ? "Administrator" : "Użytkownik"}
-                                    </Typography>
-                                    {userData.role === "admin" && (
-                                        <Typography variant="caption" sx={{ color: "#FF6A00" }}>
-                                            ✅ Masz uprawnienia do zarządzania turniejami i zawodnikami
-                                        </Typography>
-                                    )}
-                                </Box>
-                            </Box>
-                        </Paper>
-                    </Box>
+      <Divider sx={{ bgcolor: "rgba(255,255,255,0.1)" }} />
 
-                    {}
-                    <Box sx={{ mt: 4, display: "flex", justifyContent: "center" }}>
-                        <Button
-                            variant="outlined"
-                            onClick={handleLogout}
-                            sx={{
-                                color: "#fff",
-                                borderColor: "#FF6A00",
-                                "&:hover": {
-                                    borderColor: "#cc5500",
-                                    bgcolor: "rgba(255,106,0,0.1)",
-                                },
-                            }}
-                        >
-                            Wyloguj się
-                        </Button>
-                    </Box>
-                </Paper>
-            </Container>
-        </Box>
-    );
+      {}
+      <List sx={{ flex: 1, px: 2 }}>
+        {menuItems.map((item) => (
+          <ListItemButton
+            key={item.id}
+            selected={selectedTab === item.id}
+            onClick={() => setSelectedTab(item.id)}
+            sx={{
+              borderRadius: 2,
+              mb: 0.5,
+              "&.Mui-selected": {
+                bgcolor: "rgba(255,106,0,0.2)",
+                "&:hover": {
+                  bgcolor: "rgba(255,106,0,0.3)",
+                },
+                "& .MuiListItemIcon-root": {
+                  color: "#FF6A00",
+                },
+                "& .MuiListItemText-primary": {
+                  color: "#FF6A00",
+                  fontWeight: 600,
+                },
+              },
+              "&:hover": {
+                bgcolor: "rgba(255,255,255,0.1)",
+              },
+            }}
+          >
+            <ListItemIcon sx={{ color: "#ccc", minWidth: 40 }}>
+              {item.icon}
+            </ListItemIcon>
+            <ListItemText primary={item.label} sx={{ "& .MuiListItemText-primary": { fontSize: "0.95rem" } }} />
+          </ListItemButton>
+        ))}
+      </List>
+
+      <Divider sx={{ bgcolor: "rgba(255,255,255,0.1)" }} />
+
+      {}
+      <Box sx={{ p: 2 }}>
+        <ListItemButton
+          onClick={handleLogout}
+          sx={{
+            borderRadius: 2,
+            "&:hover": {
+              bgcolor: "rgba(255,0,0,0.1)",
+            },
+          }}
+        >
+          <ListItemIcon sx={{ color: "#ff6b6b", minWidth: 40 }}>
+            <LogoutIcon />
+          </ListItemIcon>
+          <ListItemText primary="Wyloguj" sx={{ "& .MuiListItemText-primary": { color: "#ff6b6b" } }} />
+        </ListItemButton>
+      </Box>
+    </Box>
+  );
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        backgroundImage: `url(${backgroundImage})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
+      {}
+      <AppBar
+        position="fixed"
+        sx={{
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          ml: { sm: `${drawerWidth}px` },
+          bgcolor: "rgba(0,0,0,0.85)",
+          backdropFilter: "blur(10px)",
+          boxShadow: "none",
+          borderBottom: "1px solid rgba(255,255,255,0.1)",
+        }}
+      >
+        <Toolbar>
+          <IconButton
+            color="inherit"
+            aria-label="open drawer"
+            edge="start"
+            onClick={handleDrawerToggle}
+            sx={{ mr: 2, display: { sm: "none" } }}
+          >
+            <MenuIcon />
+          </IconButton>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          {}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Typography variant="body1" sx={{ color: "#fff" }}>
+              {userData.firstName} {userData.lastName}
+            </Typography>
+            <Avatar
+              sx={{
+                bgcolor: "#FF6A00",
+                width: 40,
+                height: 40,
+              }}
+            >
+              {userData.firstName?.[0]}{userData.lastName?.[0]}
+            </Avatar>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      {}
+      <Box
+        component="nav"
+        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+      >
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: "block", sm: "none" },
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              bgcolor: "rgba(0,0,0,0.9)",
+              backdropFilter: "blur(10px)",
+              borderRight: "1px solid rgba(255,255,255,0.1)",
+            },
+          }}
+        >
+          {drawer}
+        </Drawer>
+
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: "none", sm: "block" },
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              bgcolor: "rgba(0,0,0,0.85)",
+              backdropFilter: "blur(10px)",
+              borderRight: "1px solid rgba(255,255,255,0.1)",
+              position: "fixed",
+              height: "100vh",
+            },
+          }}
+          open
+        >
+          {drawer}
+        </Drawer>
+      </Box>
+
+      {}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          minHeight: "100vh",
+          p: 3,
+          mt: "64px",
+        }}
+      >
+        <Container maxWidth="xl">
+          {renderContent()}
+        </Container>
+      </Box>
+    </Box>
+  );
 };
 
 export default UserPanel;
