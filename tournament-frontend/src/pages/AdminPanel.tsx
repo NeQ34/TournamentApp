@@ -43,11 +43,9 @@ const AdminPanel = () => {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [selectedTab, setSelectedTab] = useState("dashboard");
 
-    // Pobierz dane użytkownika z localStorage
     const userDataRaw = localStorage.getItem("user");
     const userData = userDataRaw ? JSON.parse(userDataRaw) : null;
 
-    // Jeśli brak danych lub nie jest adminem, przekieruj do logowania
     if (!userData || userData.role !== "admin") {
         navigate("/login");
         return null;
@@ -62,7 +60,6 @@ const AdminPanel = () => {
         navigate("/login");
     };
 
-    // Menu boczne - lista zakładek dla admina
     const menuItems = [
         { id: "dashboard", label: "Dashboard", icon: <DashboardIcon />, category: "Główne" },
         { id: "tournaments", label: "Turnieje", icon: <TournamentIcon />, category: "Zarządzanie" },
@@ -77,7 +74,6 @@ const AdminPanel = () => {
         { id: "settings", label: "Ustawienia", icon: <SettingsIcon />, category: "Konto" },
     ];
 
-    // Grupowanie menu według kategorii
     const groupedMenu = menuItems.reduce((acc, item) => {
         if (!acc[item.category]) {
             acc[item.category] = [];
@@ -86,7 +82,6 @@ const AdminPanel = () => {
         return acc;
     }, {} as Record<string, typeof menuItems>);
 
-    // Treść w zależności od wybranej zakładki (póki co placeholder)
     const renderContent = () => {
         switch (selectedTab) {
             case "dashboard":
@@ -107,16 +102,6 @@ const AdminPanel = () => {
                         <Typography variant="body1" sx={{ mt: 2, color: "rgba(255,255,255,0.7)" }}>
                             Witaj, {userData.firstName} {userData.lastName}!
                         </Typography>
-                        <Typography variant="body2" sx={{ mt: 1, color: "rgba(255,255,255,0.5)" }}>
-                            Tutaj będą wyświetlane statystyki systemu, podsumowania i najważniejsze informacje.
-                        </Typography>
-                        <Box component="ul" sx={{ mt: 2, color: "rgba(255,255,255,0.7)", pl: 2 }}>
-                            <li>Liczba użytkowników w systemie</li>
-                            <li>Liczba aktywnych turniejów</li>
-                            <li>Liczba drużyn i zawodników</li>
-                            <li>Ostatnie zgłoszenia do turniejów</li>
-                            <li>Wykresy i statystyki</li>
-                        </Box>
                     </Paper>
                 );
             case "tournaments":
@@ -133,9 +118,6 @@ const AdminPanel = () => {
                     >
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Zarządzanie turniejami
-                        </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie lista wszystkich turniejów, możliwość tworzenia, edycji i usuwania turniejów.
                         </Typography>
                     </Paper>
                 );
@@ -154,9 +136,6 @@ const AdminPanel = () => {
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Zarządzanie drużynami
                         </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie lista wszystkich drużyn, możliwość edycji, usuwania i zarządzania członkami.
-                        </Typography>
                     </Paper>
                 );
             case "players":
@@ -173,9 +152,6 @@ const AdminPanel = () => {
                     >
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Zarządzanie zawodnikami
-                        </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie centralna baza zawodników, możliwość dodawania, edycji i przypisywania do drużyn.
                         </Typography>
                     </Paper>
                 );
@@ -194,9 +170,6 @@ const AdminPanel = () => {
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Generowanie drabinek
                         </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie możliwość generowania drabinek turniejowych (pucharowych, ligowych, mieszanych).
-                        </Typography>
                     </Paper>
                 );
             case "schedule":
@@ -213,9 +186,6 @@ const AdminPanel = () => {
                     >
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Generowanie terminarzy
-                        </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie możliwość automatycznego generowania terminarzy meczów oraz ręcznej edycji.
                         </Typography>
                     </Paper>
                 );
@@ -234,9 +204,6 @@ const AdminPanel = () => {
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Wprowadzanie wyników
                         </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie możliwość wprowadzania i zatwierdzania wyników meczów.
-                        </Typography>
                     </Paper>
                 );
             case "archive":
@@ -253,9 +220,6 @@ const AdminPanel = () => {
                     >
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Archiwum turniejów
-                        </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będą zakończone turnieje, możliwość przeglądania wyników i eksportu danych.
                         </Typography>
                     </Paper>
                 );
@@ -274,9 +238,6 @@ const AdminPanel = () => {
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Raporty i statystyki
                         </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będą generowane raporty (PDF, CSV) i statystyki systemu.
-                        </Typography>
                     </Paper>
                 );
             case "profile":
@@ -294,9 +255,6 @@ const AdminPanel = () => {
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Mój profil
                         </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie można edytować swoje dane osobowe oraz zmienić hasło.
-                        </Typography>
                     </Paper>
                 );
             case "settings":
@@ -313,9 +271,6 @@ const AdminPanel = () => {
                     >
                         <Typography variant="h4" fontWeight={700} gutterBottom>
                             Ustawienia systemu
-                        </Typography>
-                        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                            Tutaj będzie konfiguracja systemu, zarządzanie kategoriami sportów i ustawieniami globalnymi.
                         </Typography>
                     </Paper>
                 );
@@ -354,7 +309,7 @@ const AdminPanel = () => {
 
             <Divider sx={{ bgcolor: "rgba(255,255,255,0.1)" }} />
 
-            {/* Lista zakładek z grupowaniem */}
+            {}
             <List sx={{ flex: 1, px: 2 }}>
                 {Object.entries(groupedMenu).map(([category, items]) => (
                     <Box key={category}>
@@ -410,7 +365,7 @@ const AdminPanel = () => {
 
             <Divider sx={{ bgcolor: "rgba(255,255,255,0.1)" }} />
 
-            {/* Przycisk wylogowania w sidebarze (na dole) */}
+            {}
             <Box sx={{ p: 2 }}>
                 <ListItemButton
                     onClick={handleLogout}
@@ -441,7 +396,7 @@ const AdminPanel = () => {
                 backgroundRepeat: "no-repeat",
             }}
         >
-            {/* AppBar (górny pasek) */}
+            {}
             <AppBar
                 position="fixed"
                 sx={{
@@ -466,7 +421,7 @@ const AdminPanel = () => {
 
                     <Box sx={{ flexGrow: 1 }} />
 
-                    {/* Nazwa użytkownika i awatar */}
+                    {}
                     <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                         <Chip
                             icon={<AdminIcon sx={{ fontSize: 16 }} />}
@@ -495,7 +450,7 @@ const AdminPanel = () => {
                 </Toolbar>
             </AppBar>
 
-            {/* Sidebar - wersja desktopowa */}
+            {}
             <Box
                 component="nav"
                 sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
@@ -537,7 +492,7 @@ const AdminPanel = () => {
                 </Drawer>
             </Box>
 
-            {/* Główna treść */}
+            {}
             <Box
                 component="main"
                 sx={{

@@ -62,9 +62,9 @@ const LoginPage = () => {
 
           if (responseData.user.role === "admin") {
             navigate("/adminpanel");
-        } else {
+          } else {
             navigate("/userpanel");
-        }
+          }
 
           console.log("Zalogowano:", responseData.user);
         }
