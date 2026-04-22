@@ -31,5 +31,8 @@ public class User {
 
     private String role; // USER, ADMIN, SUPERADMIN
 
-
+    // DODAJ TE POLA TUTAJ:
+    private String nickname;
+    private String position;
+    private String createdByEmail;
 }
