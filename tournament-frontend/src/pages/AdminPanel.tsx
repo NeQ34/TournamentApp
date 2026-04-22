@@ -36,6 +36,7 @@ import {
 
 import PlayersManagement from "../components/Admin/PlayersManagement";
 import backgroundImage from "../photos/img2.jpg";
+import TeamsManagement from "../components/Admin/TeamsManagement";
 
 const drawerWidth = 280;
 
@@ -99,7 +100,25 @@ const AdminPanel = () => {
                         </Typography>
                     </Paper>
                 );
-
+            case "tournaments":
+                return (
+                    <Paper
+                        elevation={8}
+                        sx={{
+                            p: 4,
+                            borderRadius: 4,
+                            backgroundColor: "rgba(0,0,0,0.7)",
+                            backdropFilter: "blur(6px)",
+                            color: "#fff",
+                        }}
+                    >
+                        <Typography variant="h4" fontWeight={700} gutterBottom>
+                            Zarządzanie turniejami
+                        </Typography>
+                    </Paper>
+                );
+            case "teams":
+                return <TeamsManagement />;
             case "players":
                 // Wywołanie wydzielonego komponentu
                 return <PlayersManagement userData={userData} />;

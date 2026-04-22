@@ -3,8 +3,8 @@ package Lab_spec.tournament_backend.auth;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
-import Lab_spec.tournament_backend.user.User;
-import Lab_spec.tournament_backend.user.UserRepository;
+import Lab_spec.tournament_backend.model.User;
+import Lab_spec.tournament_backend.repository.UserRepository;
 
 import java.time.LocalDate;
 

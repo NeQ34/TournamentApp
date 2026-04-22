@@ -1,8 +1,7 @@
 package Lab_spec.tournament_backend.auth;
 
-import Lab_spec.tournament_backend.user.User;
+import Lab_spec.tournament_backend.model.User;
 import lombok.RequiredArgsConstructor;
-import org.apache.coyote.Response;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
