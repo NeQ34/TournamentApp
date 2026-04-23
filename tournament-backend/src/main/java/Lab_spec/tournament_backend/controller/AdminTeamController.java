@@ -84,4 +84,14 @@ public class AdminTeamController {
     public ResponseEntity<UserSearchResponse> searchUserByEmail(@RequestParam String email) {
         return ResponseEntity.ok(adminTeamService.searchUserByEmail(email));
     }
+
+    @GetMapping("/teams/pending")
+    public ResponseEntity<List<TeamResponse>> getPendingTeams() {
+        return ResponseEntity.ok(adminTeamService.getPendingTeams());
+    }
+
+    @PutMapping("/teams/{id}/approve")
+    public ResponseEntity<TeamResponse> approveTeam(@PathVariable Long id) {
+        return ResponseEntity.ok(adminTeamService.approveTeam(id));
+    }
 }

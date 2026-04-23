@@ -29,6 +29,7 @@ import {
   Menu as MenuIcon,
 } from "@mui/icons-material";
 import backgroundImage from "../photos/img2.jpg";
+import Teams from "../components/User/Teams";
 
 const drawerWidth = 280;
 
@@ -136,22 +137,7 @@ const UserPanel = () => {
           </Paper>
         );
       case "teams":
-        return (
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              backgroundColor: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-              color: "#fff",
-            }}
-          >
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              Drużyny
-            </Typography>
-          </Paper>
-        );
+        return <Teams userData={userData} />;
       case "archive":
         return (
           <Paper

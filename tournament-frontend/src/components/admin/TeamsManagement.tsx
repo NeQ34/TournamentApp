@@ -38,7 +38,7 @@ interface Team {
   captainId: number;
   captainName: string;
   description?: string;
-  status: "active" | "inactive";
+  status: "active" | "inactive" | "pending";
   membersCount?: number;
 }
 
@@ -344,6 +344,7 @@ const TeamsManagement = () => {
     description: "",
     status: "active" as "active" | "inactive",
   });
+const [pendingTeams, setPendingTeams] = useState<Team[]>([]);
 
   const fetchTeams = async () => {
     try {
@@ -360,6 +361,20 @@ const TeamsManagement = () => {
       setLoading(false);
     }
   };
+
+const fetchPendingTeams = async () => {
+  try {
+    const response = await fetch("http://localhost:8080/api/admin/teams/pending", {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
+    const data = await response.json();
+    setPendingTeams(data);
+  } catch (error) {
+    console.error("Błąd pobierania zgłoszeń:", error);
+  }
+};
 
   const handleAddTeam = async () => {
     try {
@@ -432,6 +447,27 @@ const TeamsManagement = () => {
     }
   };
 
+const handleApproveTeam = async (teamId: number) => {
+  try {
+    const response = await fetch(`http://localhost:8080/api/admin/teams/${teamId}/approve`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
+
+    if (response.ok) {
+      fetchTeams();
+      fetchPendingTeams();
+    } else {
+      const error = await response.json();
+      alert(error.message || "Nie udało się zaakceptować drużyny");
+    }
+  } catch (error) {
+    console.error("Błąd akceptacji drużyny:", error);
+  }
+};
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -457,6 +493,7 @@ const TeamsManagement = () => {
 
   useEffect(() => {
     fetchTeams();
+    fetchPendingTeams();
   }, []);
 
   if (loading) {
@@ -493,6 +530,69 @@ const TeamsManagement = () => {
         </Button>
       </Box>
 
+      {pendingTeams.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h5" fontWeight={700} sx={{ color: "#fff", mb: 2 }}>
+            Zgłoszenia oczekujące
+          </Typography>
+
+          <Grid container spacing={3}>
+            {pendingTeams.map((team) => (
+              <Grid size={{ xs: 12, md: 6, lg: 4 }} key={team.id}>
+                <Paper
+                  elevation={8}
+                  sx={{
+                    p: 3,
+                    borderRadius: 4,
+                    backgroundColor: "rgba(255,106,0,0.12)",
+                    backdropFilter: "blur(6px)",
+                    color: "#fff",
+                    border: "1px solid rgba(255,106,0,0.4)",
+                  }}
+                >
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                    <Typography variant="h6" fontWeight={700}>
+                      {team.name}
+                    </Typography>
+                    <Chip
+                      label="Oczekuje"
+                      size="small"
+                      sx={{
+                        bgcolor: "rgba(255,193,7,0.15)",
+                        color: "#ffb300",
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
+                      <strong>Dyscyplina:</strong> {team.sport}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
+                      <strong>Kapitan:</strong> {team.captainName}
+                    </Typography>
+                    {team.description && (
+                      <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)", mt: 1 }}>
+                        {team.description}
+                      </Typography>
+                    )}
+                  </Box>
+
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={() => handleApproveTeam(team.id)}
+                    sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
+                  >
+                    Akceptuj drużynę
+                  </Button>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
       {/* Lista drużyn */}
       <Grid container spacing={3}>
         {teams.map((team) => (
@@ -514,11 +614,27 @@ const TeamsManagement = () => {
                   {team.name}
                 </Typography>
                 <Chip
-                  label={team.status === "active" ? "Aktywna" : "Nieaktywna"}
+                  label={
+                    team.status === "active"
+                      ? "Aktywna"
+                      : team.status === "pending"
+                      ? "Oczekuje"
+                      : "Nieaktywna"
+                  }
                   size="small"
                   sx={{
-                    bgcolor: team.status === "active" ? "rgba(76, 175, 80, 0.2)" : "rgba(255, 107, 107, 0.2)",
-                    color: team.status === "active" ? "#4caf50" : "#ff6b6b",
+                    bgcolor:
+                      team.status === "active"
+                        ? "rgba(76, 175, 80, 0.2)"
+                        : team.status === "pending"
+                        ? "rgba(255, 193, 7, 0.2)"
+                        : "rgba(255, 107, 107, 0.2)",
+                    color:
+                      team.status === "active"
+                        ? "#4caf50"
+                        : team.status === "pending"
+                        ? "#ffb300"
+                        : "#ff6b6b",
                   }}
                 />
               </Box>

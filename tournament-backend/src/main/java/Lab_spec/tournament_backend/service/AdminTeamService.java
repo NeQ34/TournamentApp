@@ -165,6 +165,59 @@ public class AdminTeamService {
         return response;
     }
 
+    @Transactional
+    public TeamResponse requestTeam(TeamRequest request) {
+        if (teamRepository.existsByName(request.getName())) {
+            throw new RuntimeException("Drużyna o tej nazwie już istnieje");
+        }
+
+        if (request.getCaptainId() == null || request.getCaptainId().isBlank()) {
+            throw new RuntimeException("Email lub ID kapitana jest wymagane");
+        }
+
+        User captain = findUserByEmailOrId(request.getCaptainId());
+
+        Team team = new Team();
+        team.setName(request.getName());
+        team.setSport(request.getSport());
+        team.setDescription(request.getDescription());
+        team.setStatus("pending");
+        team.setCaptain(captain);
+
+        Team savedTeam = teamRepository.save(team);
+
+        TeamMember captainMember = new TeamMember();
+        captainMember.setTeam(savedTeam);
+        captainMember.setUser(captain);
+        captainMember.setRole("captain");
+        teamMemberRepository.save(captainMember);
+
+        return convertToResponse(savedTeam);
+    }
+
+    public List<TeamResponse> getPendingTeams() {
+        return teamRepository.findByStatus("pending").stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<TeamResponse> getActiveTeams() {
+        return teamRepository.findByStatus("active").stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public TeamResponse approveTeam(Long id) {
+        Team team = teamRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Drużyna nie znaleziona"));
+
+        team.setStatus("active");
+
+        Team updatedTeam = teamRepository.save(team);
+        return convertToResponse(updatedTeam);
+    }
+
 
     private User findUserByEmailOrId(String captainId) {
         if (captainId.contains("@")) {
