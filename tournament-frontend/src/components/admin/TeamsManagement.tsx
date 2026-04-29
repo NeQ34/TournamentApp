@@ -4,6 +4,12 @@ import {
   Button,
   Typography,
   Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -20,8 +26,7 @@ import {
   Avatar,
   IconButton,
   Chip,
-  Grid,
-  Autocomplete, // DODAJ TO
+  TablePagination,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -29,8 +34,9 @@ import {
   Delete as DeleteIcon,
   Group as GroupIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
+  Search as SearchIcon,
+  CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
-
 
 // ========== TYPY ==========
 interface Team {
@@ -40,7 +46,18 @@ interface Team {
   captainId: number;
   captainName: string;
   description?: string;
-  status: "active" | "inactive" | "pending";
+  status: "active" | "inactive";
+  membersCount?: number;
+}
+
+interface PendingTeam {
+  id: number;
+  name: string;
+  sport: string;
+  captainId: number;
+  captainName: string;
+  description?: string;
+  status: "pending";
   membersCount?: number;
 }
 
@@ -62,7 +79,7 @@ interface UserSearchResult {
 interface MembersDialogProps {
   open: boolean;
   onClose: () => void;
-  team: Team | null;
+  team: Team | PendingTeam | null;
   onTeamUpdate: () => void;
 }
 
@@ -333,17 +350,16 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
 };
 
 // ========== GŁÓWNY KOMPONENT ZARZĄDZANIA DRUŻYNAMI ==========
-const sportsDictionary = [
-  "Piłka nożna", "Siatkówka", "Koszykówka", "Piłka ręczna",
-  "Tenis ziemny", "Tenis stołowy", "Szachy",
-  "E-sport: League of Legends", "E-sport: Counter-Strike 2", "E-sport: Valorant"
-];
 const TeamsManagement = () => {
   const [teams, setTeams] = useState<Team[]>([]);
+  const [pendingTeams, setPendingTeams] = useState<PendingTeam[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [openMembersDialog, setOpenMembersDialog] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<Team | PendingTeam | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [formData, setFormData] = useState({
     name: "",
     sport: "",
@@ -351,7 +367,14 @@ const TeamsManagement = () => {
     description: "",
     status: "active" as "active" | "inactive" | "pending",
   });
-const [pendingTeams, setPendingTeams] = useState<Team[]>([]);
+
+  // Funkcja filtrowania drużyn
+  const filterTeams = (teamsList: (Team | PendingTeam)[]) => {
+    if (!searchTerm) return teamsList;
+    return teamsList.filter((team) =>
+      team.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
 
   const fetchTeams = async () => {
     try {
@@ -369,19 +392,19 @@ const [pendingTeams, setPendingTeams] = useState<Team[]>([]);
     }
   };
 
-const fetchPendingTeams = async () => {
-  try {
-    const response = await fetch("http://localhost:8080/api/admin/teams/pending", {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    });
-    const data = await response.json();
-    setPendingTeams(data);
-  } catch (error) {
-    console.error("Błąd pobierania zgłoszeń:", error);
-  }
-};
+  const fetchPendingTeams = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/admin/teams/pending", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      const data = await response.json();
+      setPendingTeams(data);
+    } catch (error) {
+      console.error("Błąd pobierania zgłoszeń:", error);
+    }
+  };
 
   const handleAddTeam = async () => {
     try {
@@ -444,6 +467,7 @@ const fetchPendingTeams = async () => {
 
         if (response.ok) {
           fetchTeams();
+          fetchPendingTeams();
         } else {
           const error = await response.json();
           alert(error.message || "Błąd usuwania drużyny");
@@ -454,26 +478,26 @@ const fetchPendingTeams = async () => {
     }
   };
 
-const handleApproveTeam = async (teamId: number) => {
-  try {
-    const response = await fetch(`http://localhost:8080/api/admin/teams/${teamId}/approve`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    });
+  const handleApproveTeam = async (teamId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/teams/${teamId}/approve`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
 
-    if (response.ok) {
-      fetchTeams();
-      fetchPendingTeams();
-    } else {
-      const error = await response.json();
-      alert(error.message || "Nie udało się zaakceptować drużyny");
+      if (response.ok) {
+        fetchTeams();
+        fetchPendingTeams();
+      } else {
+        const error = await response.json();
+        alert(error.message || "Nie udało się zaakceptować drużyny");
+      }
+    } catch (error) {
+      console.error("Błąd akceptacji drużyny:", error);
     }
-  } catch (error) {
-    console.error("Błąd akceptacji drużyny:", error);
-  }
-};
+  };
 
   const resetForm = () => {
     setFormData({
@@ -486,22 +510,39 @@ const handleApproveTeam = async (teamId: number) => {
     setSelectedTeam(null);
   };
 
-  const openEditDialog = (team: Team) => {
+  const openEditDialog = (team: Team | PendingTeam) => {
     setSelectedTeam(team);
     setFormData({
       name: team.name,
       sport: team.sport,
       captainId: String(team.captainId),
       description: team.description || "",
-      status: team.status,
+      status: team.status === "pending" ? "pending" : team.status,
     });
     setOpenDialog(true);
+  };
+
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
   };
 
   useEffect(() => {
     fetchTeams();
     fetchPendingTeams();
   }, []);
+
+  // Filtrowane listy
+  const filteredPending = filterTeams(pendingTeams);
+  const filteredActive = filterTeams(teams);
+
+  // Paginacja
+  const paginatedPending = filteredPending.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const paginatedActive = filteredActive.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   if (loading) {
     return (
@@ -522,183 +563,277 @@ const handleApproveTeam = async (teamId: number) => {
 
   return (
     <Box>
-      {/* Nagłówek */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+      {/* Nagłówek z wyszukiwarką */}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+          flexWrap: "wrap",
+          gap: 2,
+        }}
+      >
         <Typography variant="h4" fontWeight={700} sx={{ color: "#fff" }}>
           Zarządzanie drużynami
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setOpenDialog(true)}
-          sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
-        >
-          Dodaj drużynę
-        </Button>
+
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+          <TextField
+            size="small"
+            placeholder="Szukaj drużyny..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            sx={{
+              bgcolor: "rgba(255,255,255,0.1)",
+              borderRadius: 2,
+              input: { color: "#fff" },
+              "& .MuiOutlinedInput-root": {
+                "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+              },
+            }}
+            InputProps={{
+              startAdornment: <SearchIcon sx={{ color: "#fff", mr: 1, fontSize: 20 }} />,
+            }}
+          />
+
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              resetForm();
+              setOpenDialog(true);
+            }}
+            sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
+          >
+            Dodaj drużynę
+          </Button>
+        </Box>
       </Box>
 
-      {pendingTeams.length > 0 && (
+      {/* Zgłoszenia oczekujące - Tabela */}
+      {filteredPending.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <Typography variant="h5" fontWeight={700} sx={{ color: "#fff", mb: 2 }}>
-            Zgłoszenia oczekujące
+            Zgłoszenia oczekujące ({filteredPending.length})
           </Typography>
 
-          <Grid container spacing={3}>
-            {pendingTeams.map((team) => (
-              <Grid size={{ xs: 12, md: 6, lg: 4 }} key={team.id}>
-                <Paper
-                  elevation={8}
-                  sx={{
-                    p: 3,
-                    borderRadius: 4,
-                    backgroundColor: "rgba(255,106,0,0.12)",
-                    backdropFilter: "blur(6px)",
-                    color: "#fff",
-                    border: "1px solid rgba(255,106,0,0.4)",
-                  }}
-                >
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                    <Typography variant="h6" fontWeight={700}>
-                      {team.name}
-                    </Typography>
-                    <Chip
-                      label="Oczekuje"
-                      size="small"
-                      sx={{
-                        bgcolor: "rgba(255,193,7,0.15)",
-                        color: "#ffb300",
-                      }}
-                    />
-                  </Box>
-
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                      <strong>Dyscyplina:</strong> {team.sport}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                      <strong>Kapitan:</strong> {team.captainName}
-                    </Typography>
-                    {team.description && (
-                      <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)", mt: 1 }}>
-                        {team.description}
-                      </Typography>
-                    )}
-                  </Box>
-
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    onClick={() => handleApproveTeam(team.id)}
-                    sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
-                  >
-                    Akceptuj drużynę
-                  </Button>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
+          <TableContainer
+            component={Paper}
+            sx={{
+              bgcolor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              borderRadius: 4,
+              overflow: "auto",
+            }}
+          >
+            <Table sx={{ minWidth: 650 }}>
+              <TableHead>
+                <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Nazwa drużyny</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Dyscyplina</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Kapitan</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Opis</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Status</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }} align="center">Akcje</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedPending.map((team) => (
+                  <TableRow key={team.id} sx={{ "&:hover": { bgcolor: "rgba(255,255,255,0.05)" } }}>
+                    <TableCell sx={{ color: "#fff", fontWeight: 600 }}>{team.name}</TableCell>
+                    <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.sport}</TableCell>
+                    <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.captainName}</TableCell>
+                    <TableCell sx={{ color: "rgba(255,255,255,0.7)" }}>
+                      {team.description && team.description.length > 50 ? team.description.substring(0, 50) + "..." : team.description || "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label="Oczekuje"
+                        size="small"
+                        sx={{
+                          bgcolor: "rgba(255,193,7,0.15)",
+                          color: "#ffb300",
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Box sx={{ display: "flex", gap: 1, justifyContent: "center" }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleApproveTeam(team.id)}
+                          sx={{ color: "#4caf50" }}
+                          title="Akceptuj"
+                        >
+                          <CheckCircleIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setSelectedTeam(team);
+                            setOpenMembersDialog(true);
+                          }}
+                          sx={{ color: "#FF6A00" }}
+                          title="Członkowie"
+                        >
+                          <GroupIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteTeam(team.id)}
+                          sx={{ color: "#ff6b6b" }}
+                          title="Usuń"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </Box>
       )}
 
-      {/* Lista drużyn */}
-      <Grid container spacing={3}>
-        {teams.map((team) => (
-          <Grid size={{ xs: 12, md: 6, lg: 4 }} key={team.id}>
-            <Paper
-              elevation={8}
+      {/* Aktywne drużyny - Tabela */}
+      <Typography variant="h5" fontWeight={700} sx={{ color: "#fff", mb: 2 }}>
+        Aktywne drużyny ({filteredActive.length})
+      </Typography>
+
+      {filteredActive.length === 0 && searchTerm && (
+        <Paper
+          elevation={8}
+          sx={{
+            p: 4,
+            borderRadius: 4,
+            backgroundColor: "rgba(0,0,0,0.7)",
+            backdropFilter: "blur(6px)",
+            textAlign: "center",
+          }}
+        >
+          <Typography sx={{ color: "rgba(255,255,255,0.7)" }}>
+            Nie znaleziono drużyn pasujących do kryterium "{searchTerm}"
+          </Typography>
+        </Paper>
+      )}
+
+      {filteredActive.length === 0 && !searchTerm && (
+        <Paper
+          elevation={8}
+          sx={{
+            p: 4,
+            borderRadius: 4,
+            backgroundColor: "rgba(0,0,0,0.7)",
+            backdropFilter: "blur(6px)",
+            textAlign: "center",
+          }}
+        >
+          <Typography sx={{ color: "rgba(255,255,255,0.7)" }}>
+            Brak aktywnych drużyn. Kliknij "Dodaj drużynę" aby utworzyć nową.
+          </Typography>
+        </Paper>
+      )}
+
+      {filteredActive.length > 0 && (
+        <>
+          <TableContainer
+            component={Paper}
+            sx={{
+              bgcolor: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              borderRadius: 4,
+              overflow: "auto",
+            }}
+          >
+            <Table sx={{ minWidth: 650 }}>
+              <TableHead>
+                <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Nazwa drużyny</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Dyscyplina</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Kapitan</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Liczba członków</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Opis</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Status</TableCell>
+                  <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }} align="center">Akcje</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedActive.map((team) => (
+                  <TableRow key={team.id} sx={{ "&:hover": { bgcolor: "rgba(255,255,255,0.05)" } }}>
+                    <TableCell sx={{ color: "#fff", fontWeight: 600 }}>{team.name}</TableCell>
+                    <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.sport}</TableCell>
+                    <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.captainName}</TableCell>
+                    <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.membersCount || 0}</TableCell>
+                    <TableCell sx={{ color: "rgba(255,255,255,0.7)" }}>
+                      {team.description && team.description.length > 50 ? team.description.substring(0, 50) + "..." : team.description || "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label="Aktywna"
+                        size="small"
+                        sx={{
+                          bgcolor: "rgba(76, 175, 80, 0.2)",
+                          color: "#4caf50",
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Box sx={{ display: "flex", gap: 1, justifyContent: "center" }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setSelectedTeam(team);
+                            setOpenMembersDialog(true);
+                          }}
+                          sx={{ color: "#FF6A00" }}
+                          title="Członkowie"
+                        >
+                          <GroupIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => openEditDialog(team)}
+                          sx={{ color: "#2196f3" }}
+                          title="Edytuj"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteTeam(team.id)}
+                          sx={{ color: "#ff6b6b" }}
+                          title="Usuń"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Paginacja */}
+          <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2 }}>
+            <TablePagination
+              rowsPerPageOptions={[5, 10, 25, 50]}
+              component="div"
+              count={filteredActive.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
               sx={{
-                p: 3,
-                borderRadius: 4,
-                backgroundColor: "rgba(0,0,0,0.7)",
-                backdropFilter: "blur(6px)",
                 color: "#fff",
-                transition: "transform 0.2s",
-                "&:hover": { transform: "translateY(-4px)" },
+                "& .MuiTablePagination-selectIcon": { color: "#fff" },
+                "& .MuiTablePagination-select": { color: "#fff" },
               }}
-            >
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                <Typography variant="h6" fontWeight={700}>
-                  {team.name}
-                </Typography>
-                <Chip
-                  label={
-                    team.status === "active"
-                      ? "Aktywna"
-                      : team.status === "pending"
-                      ? "Oczekuje"
-                      : "Nieaktywna"
-                  }
-                  size="small"
-                  sx={{
-                    bgcolor:
-                      team.status === "active"
-                        ? "rgba(76, 175, 80, 0.2)"
-                        : team.status === "pending"
-                        ? "rgba(255, 193, 7, 0.2)"
-                        : "rgba(255, 107, 107, 0.2)",
-                    color:
-                      team.status === "active"
-                        ? "#4caf50"
-                        : team.status === "pending"
-                        ? "#ffb300"
-                        : "#ff6b6b",
-                  }}
-                />
-              </Box>
-
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                  <strong>Dyscyplina:</strong> {team.sport}
-                </Typography>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                  <strong>Kapitan:</strong> {team.captainName}
-                </Typography>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)" }}>
-                  <strong>Liczba członków:</strong> {team.membersCount || 0}
-                </Typography>
-                {team.description && (
-                  <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.7)", mt: 1 }}>
-                    {team.description}
-                  </Typography>
-                )}
-              </Box>
-
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<GroupIcon />}
-                  onClick={() => {
-                    setSelectedTeam(team);
-                    setOpenMembersDialog(true);
-                  }}
-                  sx={{ color: "#FF6A00", borderColor: "#FF6A00" }}
-                >
-                  Członkowie
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<EditIcon />}
-                  onClick={() => openEditDialog(team)}
-                  sx={{ color: "#FF6A00", borderColor: "#FF6A00" }}
-                >
-                  Edytuj
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<DeleteIcon />}
-                  onClick={() => handleDeleteTeam(team.id)}
-                  sx={{ color: "#ff6b6b", borderColor: "#ff6b6b" }}
-                >
-                  Usuń
-                </Button>
-              </Box>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
+            />
+          </Box>
+        </>
+      )}
 
       {/* Dialog dodawania/edycji drużyny */}
       <Dialog
@@ -729,33 +864,13 @@ const handleApproveTeam = async (teamId: number) => {
               InputLabelProps={{ style: { color: "#ccc" } }}
               sx={{ input: { color: "#fff" } }}
             />
-            <Autocomplete
-                options={sportsDictionary}
-                value={formData.sport || null}
-                onChange={(_event, newValue) => {
-                  setFormData({ ...formData, sport: newValue || "" });
-                }}
-                // Stylizacja listy podpowiedzi, żeby była ciemna
-                PaperComponent={({ children }) => (
-                    <Paper sx={{ bgcolor: "#1A1A1A", color: "#fff", border: "1px solid rgba(255,255,255,0.1)" }}>
-                      {children}
-                    </Paper>
-                )}
-                renderInput={(params) => (
-                    <TextField
-                        {...params}
-                        label="Dyscyplina"
-                        fullWidth
-                        InputLabelProps={{ style: { color: "#ccc" } }}
-                        sx={{
-                          input: { color: "#fff" },
-                          "& .MuiOutlinedInput-root": {
-                            "& fieldset": { borderColor: "rgba(255,255,255,0.23)" },
-                            "&:hover fieldset": { borderColor: "#FF6A00" },
-                          }
-                        }}
-                    />
-                )}
+            <TextField
+              label="Dyscyplina"
+              fullWidth
+              value={formData.sport}
+              onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
+              InputLabelProps={{ style: { color: "#ccc" } }}
+              sx={{ input: { color: "#fff" } }}
             />
             <TextField
               label="ID Kapitana (email lub ID użytkownika)"
@@ -780,12 +895,13 @@ const handleApproveTeam = async (teamId: number) => {
               <InputLabel sx={{ color: "#ccc" }}>Status</InputLabel>
               <Select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as "active" | "inactive" })}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value as "active" | "inactive" | "pending" })}
                 label="Status"
                 sx={{ color: "#fff" }}
               >
                 <MenuItem value="active">Aktywna</MenuItem>
                 <MenuItem value="inactive">Nieaktywna</MenuItem>
+                <MenuItem value="pending">Oczekująca</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -809,7 +925,10 @@ const handleApproveTeam = async (teamId: number) => {
         open={openMembersDialog}
         onClose={() => setOpenMembersDialog(false)}
         team={selectedTeam}
-        onTeamUpdate={fetchTeams}
+        onTeamUpdate={() => {
+          fetchTeams();
+          fetchPendingTeams();
+        }}
       />
     </Box>
   );
