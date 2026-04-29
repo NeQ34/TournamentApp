@@ -4,7 +4,6 @@ import {
   Button,
   Typography,
   Paper,
-  Grid,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -21,6 +20,8 @@ import {
   Avatar,
   IconButton,
   Chip,
+  Grid,
+  Autocomplete, // DODAJ TO
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -29,6 +30,7 @@ import {
   Group as GroupIcon,
   AdminPanelSettings as AdminPanelSettingsIcon,
 } from "@mui/icons-material";
+
 
 // ========== TYPY ==========
 interface Team {
@@ -331,6 +333,11 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
 };
 
 // ========== GŁÓWNY KOMPONENT ZARZĄDZANIA DRUŻYNAMI ==========
+const sportsDictionary = [
+  "Piłka nożna", "Siatkówka", "Koszykówka", "Piłka ręczna",
+  "Tenis ziemny", "Tenis stołowy", "Szachy",
+  "E-sport: League of Legends", "E-sport: Counter-Strike 2", "E-sport: Valorant"
+];
 const TeamsManagement = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -342,7 +349,7 @@ const TeamsManagement = () => {
     sport: "",
     captainId: "",
     description: "",
-    status: "active" as "active" | "inactive",
+    status: "active" as "active" | "inactive" | "pending",
   });
 const [pendingTeams, setPendingTeams] = useState<Team[]>([]);
 
@@ -722,13 +729,33 @@ const handleApproveTeam = async (teamId: number) => {
               InputLabelProps={{ style: { color: "#ccc" } }}
               sx={{ input: { color: "#fff" } }}
             />
-            <TextField
-              label="Dyscyplina"
-              fullWidth
-              value={formData.sport}
-              onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-              InputLabelProps={{ style: { color: "#ccc" } }}
-              sx={{ input: { color: "#fff" } }}
+            <Autocomplete
+                options={sportsDictionary}
+                value={formData.sport || null}
+                onChange={(_event, newValue) => {
+                  setFormData({ ...formData, sport: newValue || "" });
+                }}
+                // Stylizacja listy podpowiedzi, żeby była ciemna
+                PaperComponent={({ children }) => (
+                    <Paper sx={{ bgcolor: "#1A1A1A", color: "#fff", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      {children}
+                    </Paper>
+                )}
+                renderInput={(params) => (
+                    <TextField
+                        {...params}
+                        label="Dyscyplina"
+                        fullWidth
+                        InputLabelProps={{ style: { color: "#ccc" } }}
+                        sx={{
+                          input: { color: "#fff" },
+                          "& .MuiOutlinedInput-root": {
+                            "& fieldset": { borderColor: "rgba(255,255,255,0.23)" },
+                            "&:hover fieldset": { borderColor: "#FF6A00" },
+                          }
+                        }}
+                    />
+                )}
             />
             <TextField
               label="ID Kapitana (email lub ID użytkownika)"
