@@ -26,7 +26,6 @@ import {
   Avatar,
   IconButton,
   Chip,
-  TablePagination,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -365,7 +364,7 @@ const TeamsManagement = () => {
     sport: "",
     captainId: "",
     description: "",
-    status: "active" as "active" | "inactive" | "pending",
+    status: "active" as "active" | "inactive",
   });
 
   // Funkcja filtrowania drużyn
