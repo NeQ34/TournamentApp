@@ -14,6 +14,7 @@ public class TeamRequest {
     @NotBlank(message = "Dyscyplina jest wymagana")
     private String sport;
 
+    @NotBlank(message = "Kapitan drużyny jest wymagany")
     private String captainId;
 
     private String description;

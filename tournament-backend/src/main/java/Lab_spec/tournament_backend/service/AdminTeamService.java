@@ -165,6 +165,34 @@ public class AdminTeamService {
         return response;
     }
 
+    public List<UserSearchResponse> searchUsersByEmailFragment(String query) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+
+        List<User> users;
+
+        try {
+            Long id = Long.parseLong(query);
+            users = userRepository.findById(id)
+                    .map(List::of)
+                    .orElse(List.of());
+        } catch (NumberFormatException e) {
+            users = userRepository.searchByEmail(query);
+        }
+
+        return users.stream()
+                .map(user -> {
+                    UserSearchResponse response = new UserSearchResponse();
+                    response.setId(user.getId());
+                    response.setFirstName(user.getFirstName());
+                    response.setLastName(user.getLastName());
+                    response.setEmail(user.getEmail());
+                    return response;
+                })
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public TeamResponse requestTeam(TeamRequest request) {
         if (teamRepository.existsByName(request.getName())) {

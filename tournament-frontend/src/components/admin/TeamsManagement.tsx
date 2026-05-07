@@ -27,7 +27,8 @@ import {
   IconButton,
   Chip,
   TablePagination,
-  Autocomplete
+  Autocomplete,
+  Alert
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -91,6 +92,14 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
   const [openAddMember, setOpenAddMember] = useState(false);
   const [searchEmail, setSearchEmail] = useState("");
   const [searchResult, setSearchResult] = useState<UserSearchResult | null>(null);
+  const [memberOptions, setMemberOptions] = useState<UserSearchResult[]>([]);
+  const [memberOptionsLoading, setMemberOptionsLoading] = useState(false);
+  const [memberError, setMemberError] = useState("");
+  const [memberSuccess, setMemberSuccess] = useState("");
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<number | null>(null);
+  const [confirmCaptainOpen, setConfirmCaptainOpen] = useState(false);
+  const [captainToChange, setCaptainToChange] = useState<number | null>(null);
 
   const fetchMembers = async () => {
     if (!team) return;
@@ -110,8 +119,44 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
     }
   };
 
+const fetchMemberSuggestions = async (email: string) => {
+  if (!email.trim()) {
+    setMemberOptions([]);
+    return;
+  }
+
+  setMemberOptionsLoading(true);
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/admin/users/suggestions?email=${email}`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      }
+    );
+
+    if (response.ok) {
+      const users = await response.json();
+      setMemberOptions(users);
+    } else {
+      setMemberOptions([]);
+    }
+  } catch (error) {
+    console.error("Błąd pobierania podpowiedzi zawodników:", error);
+    setMemberOptions([]);
+  } finally {
+    setMemberOptionsLoading(false);
+  }
+};
+
   const handleAddMember = async () => {
     if (!team) return;
+
+    setMemberError("");
+    setMemberSuccess("");
+
     try {
       const response = await fetch(`http://localhost:8080/api/admin/teams/${team.id}/members`, {
         method: "POST",
@@ -128,74 +173,95 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
         setOpenAddMember(false);
         setSearchEmail("");
         setSearchResult(null);
+        setMemberSuccess("Zawodnik został dodany do drużyny.");
       } else {
-        const error = await response.json();
-        alert(error.message || "Nie udało się dodać zawodnika");
+        const errorData = await response.json();
+        setMemberError(errorData.message || "Nie udało się dodać zawodnika.");
       }
     } catch (error) {
       console.error("Błąd dodawania zawodnika:", error);
+      setMemberError("Nie udało się połączyć z serwerem.");
     }
   };
 
-  const handleRemoveMember = async (userId: number) => {
-    if (!team) return;
-    if (window.confirm("Czy na pewno chcesz usunąć tego zawodnika z drużyny?")) {
-      try {
-        const response = await fetch(`http://localhost:8080/api/admin/teams/${team.id}/members/${userId}`, {
+  const handleRemoveMemberClick = (userId: number) => {
+    setMemberToRemove(userId);
+    setConfirmRemoveOpen(true);
+  };
+
+  const confirmRemoveMember = async () => {
+    if (!team || memberToRemove === null) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/admin/teams/${team.id}/members/${memberToRemove}`,
+        {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-        });
-
-        if (response.ok) {
-          fetchMembers();
-          onTeamUpdate();
         }
-      } catch (error) {
-        console.error("Błąd usuwania zawodnika:", error);
+      );
+
+      if (response.ok) {
+        fetchMembers();
+        onTeamUpdate();
       }
+    } catch (error) {
+      console.error("Błąd usuwania zawodnika:", error);
+    } finally {
+      setConfirmRemoveOpen(false);
+      setMemberToRemove(null);
     }
   };
 
   const handleChangeCaptain = async (userId: number) => {
     if (!team) return;
-    if (window.confirm("Czy na pewno chcesz zmienić kapitana?")) {
-      try {
-        const response = await fetch(`http://localhost:8080/api/admin/teams/${team.id}/captain/${userId}`, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
 
-        if (response.ok) {
-          fetchMembers();
-          onTeamUpdate();
-        }
-      } catch (error) {
-        console.error("Błąd zmiany kapitana:", error);
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/teams/${team.id}/captain/${userId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      if (response.ok) {
+        fetchMembers();
+        onTeamUpdate();
       }
+    } catch (error) {
+      console.error("Błąd zmiany kapitana:", error);
     }
   };
 
   const searchUser = async () => {
-    if (!searchEmail) return;
+    if (!searchEmail.trim()) {
+      setMemberError("Podaj email użytkownika.");
+      return;
+    }
+
+    setMemberError("");
+    setMemberSuccess("");
+
     try {
       const response = await fetch(`http://localhost:8080/api/admin/users/search?email=${searchEmail}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
+
       if (response.ok) {
         const user = await response.json();
         setSearchResult(user);
       } else {
         setSearchResult(null);
-        alert("Nie znaleziono użytkownika z podanym emailem");
+        const errorData = await response.json();
+        setMemberError(errorData.message || "Nie znaleziono użytkownika z podanym emailem.");
       }
     } catch (error) {
       console.error("Błąd wyszukiwania:", error);
+      setMemberError("Nie udało się połączyć z serwerem.");
     }
   };
 
@@ -246,13 +312,18 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
                               {member.role !== "captain" && (
                                   <IconButton
                                       edge="end"
-                                      onClick={() => handleChangeCaptain(member.id)}
+                                      onClick={() => {
+                                          setCaptainToChange(member.id);
+                                          setConfirmCaptainOpen(true);
+                                          }}
                                       sx={{ color: "#FF6A00", mr: 1 }}
                                   >
                                     <AdminPanelSettingsIcon />
                                   </IconButton>
                               )}
-                              <IconButton edge="end" onClick={() => handleRemoveMember(member.id)} sx={{ color: "#ff6b6b" }}>
+                              <IconButton edge="end"
+                              onClick={() => handleRemoveMemberClick(member.id)}
+                              sx={{ color: "#ff6b6b" }}>
                                 <DeleteIcon />
                               </IconButton>
                             </Box>
@@ -302,23 +373,54 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
         >
           <DialogTitle>Dodaj zawodnika do drużyny</DialogTitle>
           <DialogContent>
-            <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-              <TextField
-                  label="Email użytkownika"
+          {memberError && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+              {memberError}
+            </Alert>
+          )}
+
+          {memberSuccess && (
+            <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+              {memberSuccess}
+            </Alert>
+          )}
+            <Autocomplete
+              options={memberOptions}
+              loading={memberOptionsLoading}
+              getOptionLabel={(option) =>
+                `${option.id} - ${option.firstName} ${option.lastName} (${option.email})`
+              }
+              onInputChange={(_event, value, reason) => {
+                if (reason === "input") {
+                  setSearchEmail(value);
+                  fetchMemberSuggestions(value);
+                }
+              }}
+              onChange={(_event, value) => {
+                if (value) {
+                  setSearchEmail(value.email);
+                  setSearchResult(value);
+                }
+              }}
+              PaperComponent={({ children }) => (
+                <Paper sx={{ bgcolor: "#1A1A1A", color: "#fff", border: "1px solid rgba(255,255,255,0.1)" }}>
+                  {children}
+                </Paper>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Email lub ID użytkownika"
                   fullWidth
-                  value={searchEmail}
-                  onChange={(e) => setSearchEmail(e.target.value)}
+                  helperText="Zacznij wpisywać email lub ID zawodnika"
                   InputLabelProps={{ style: { color: "#ccc" } }}
-                  sx={{ input: { color: "#fff" } }}
-              />
-              <Button
-                  variant="contained"
-                  onClick={searchUser}
-                  sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
-              >
-                Szukaj
-              </Button>
-            </Box>
+                  sx={{
+                    input: { color: "#fff" },
+                    "& .MuiFormHelperText-root": { color: "rgba(255,255,255,0.7)" },
+                  }}
+                />
+              )}
+            />
             {searchResult && (
                 <Paper sx={{ mt: 2, p: 2, bgcolor: "rgba(255,255,255,0.1)", borderRadius: 2 }}>
                   <Typography>
@@ -346,6 +448,83 @@ const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersD
             </Button>
           </DialogActions>
         </Dialog>
+
+        <Dialog
+                  open={confirmCaptainOpen}
+                  onClose={() => setConfirmCaptainOpen(false)}
+                  PaperProps={{
+                    sx: {
+                      bgcolor: "rgba(0,0,0,0.9)",
+                      color: "#fff",
+                      borderRadius: 4,
+                    },
+                  }}
+                >
+                  <DialogTitle>Zmień kapitana</DialogTitle>
+
+                  <DialogContent>
+                    <Typography>
+                      Czy na pewno chcesz zmienić kapitana tej drużyny?
+                    </Typography>
+                  </DialogContent>
+
+                  <DialogActions>
+                    <Button onClick={() => setConfirmCaptainOpen(false)} sx={{ color: "#ccc" }}>
+                      Anuluj
+                    </Button>
+
+                    <Button
+                      variant="contained"
+                      sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
+                      onClick={() => {
+                        if (captainToChange !== null) {
+                          handleChangeCaptain(captainToChange);
+                        }
+                        setConfirmCaptainOpen(false);
+                      }}
+                    >
+                      Zmień
+                    </Button>
+                  </DialogActions>
+                </Dialog>
+
+                <Dialog
+                  open={confirmRemoveOpen}
+                  onClose={() => setConfirmRemoveOpen(false)}
+                  PaperProps={{
+                    sx: {
+                      bgcolor: "rgba(0,0,0,0.9)",
+                      color: "#fff",
+                      borderRadius: 4,
+                    },
+                  }}
+                >
+                  <DialogTitle>Usuń zawodnika</DialogTitle>
+
+                  <DialogContent>
+                    <Typography>
+                      Czy na pewno chcesz usunąć tego zawodnika z drużyny?
+                    </Typography>
+                  </DialogContent>
+
+                  <DialogActions>
+                    <Button
+                      onClick={() => setConfirmRemoveOpen(false)}
+                      sx={{ color: "#ccc" }}
+                    >
+                      Anuluj
+                    </Button>
+
+                    <Button
+                      color="error"
+                      variant="contained"
+                      onClick={confirmRemoveMember}
+                    >
+                      Usuń
+                    </Button>
+                  </DialogActions>
+                </Dialog>
+
       </>
   );
 };
@@ -361,8 +540,12 @@ const TeamsManagement = () => {
   const [pendingTeams, setPendingTeams] = useState<PendingTeam[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
+  const [dialogError, setDialogError] = useState("");
+  const [dialogSuccess, setDialogSuccess] = useState("");
   const [openMembersDialog, setOpenMembersDialog] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | PendingTeam | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [teamToDelete, setTeamToDelete] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -373,6 +556,9 @@ const TeamsManagement = () => {
     description: "",
     status: "active" as "active" | "inactive" | "pending",
   });
+const [userOptions, setUserOptions] = useState<UserSearchResult[]>([]);
+const [usersLoading, setUsersLoading] = useState(false);
+
 
   // Funkcja filtrowania drużyn
   const filterTeams = (teamsList: (Team | PendingTeam)[]) => {
@@ -412,7 +598,42 @@ const TeamsManagement = () => {
     }
   };
 
+  const fetchUserSuggestions = async (email: string) => {
+    if (!email.trim()) {
+      setUserOptions([]);
+      return;
+    }
+
+    setUsersLoading(true);
+
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/admin/users/suggestions?email=${email}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const users = await response.json();
+        setUserOptions(users);
+      } else {
+        setUserOptions([]);
+      }
+    } catch (error) {
+      console.error("Błąd pobierania podpowiedzi użytkowników:", error);
+      setUserOptions([]);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
   const handleAddTeam = async () => {
+    setDialogError("");
+    setDialogSuccess("");
+
     try {
       const response = await fetch("http://localhost:8080/api/admin/teams", {
         method: "POST",
@@ -425,19 +646,25 @@ const TeamsManagement = () => {
 
       if (response.ok) {
         fetchTeams();
+        fetchPendingTeams();
         setOpenDialog(false);
         resetForm();
       } else {
-        const error = await response.json();
-        alert(error.message || "Błąd dodawania drużyny");
+        const errorData = await response.json();
+        setDialogError(errorData.message || "Nie udało się dodać drużyny.");
       }
     } catch (error) {
       console.error("Błąd dodawania drużyny:", error);
+      setDialogError("Nie udało się połączyć z serwerem.");
     }
   };
 
   const handleEditTeam = async () => {
     if (!selectedTeam) return;
+
+    setDialogError("");
+    setDialogSuccess("");
+
     try {
       const response = await fetch(`http://localhost:8080/api/admin/teams/${selectedTeam.id}`, {
         method: "PUT",
@@ -450,41 +677,46 @@ const TeamsManagement = () => {
 
       if (response.ok) {
         fetchTeams();
+        fetchPendingTeams();
         setOpenDialog(false);
         resetForm();
       } else {
-        const error = await response.json();
-        alert(error.message || "Błąd edycji drużyny");
+        const errorData = await response.json();
+        setDialogError(errorData.message || "Nie udało się edytować drużyny.");
       }
     } catch (error) {
       console.error("Błąd edycji drużyny:", error);
+      setDialogError("Nie udało się połączyć z serwerem.");
     }
   };
 
   const handleDeleteTeam = async (teamId: number) => {
-    if (window.confirm("Czy na pewno chcesz usunąć tę drużynę?")) {
-      try {
-        const response = await fetch(`http://localhost:8080/api/admin/teams/${teamId}`, {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/teams/${teamId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
 
-        if (response.ok) {
-          fetchTeams();
-          fetchPendingTeams();
-        } else {
-          const error = await response.json();
-          alert(error.message || "Błąd usuwania drużyny");
-        }
-      } catch (error) {
-        console.error("Błąd usuwania drużyny:", error);
+      if (response.ok) {
+        fetchTeams();
+        fetchPendingTeams();
+        setDialogSuccess("Drużyna została usunięta.");
+      } else {
+        const errorData = await response.json();
+        setDialogError(errorData.message || "Błąd usuwania drużyny.");
       }
+    } catch (error) {
+      console.error("Błąd usuwania drużyny:", error);
+      setDialogError("Nie udało się połączyć z serwerem.");
     }
   };
 
   const handleApproveTeam = async (teamId: number) => {
+    setDialogError("");
+    setDialogSuccess("");
+
     try {
       const response = await fetch(`http://localhost:8080/api/admin/teams/${teamId}/approve`, {
         method: "PUT",
@@ -496,12 +728,14 @@ const TeamsManagement = () => {
       if (response.ok) {
         fetchTeams();
         fetchPendingTeams();
+        setDialogSuccess("Drużyna została zaakceptowana.");
       } else {
-        const error = await response.json();
-        alert(error.message || "Nie udało się zaakceptować drużyny");
+        const errorData = await response.json();
+        setDialogError(errorData.message || "Nie udało się zaakceptować drużyny.");
       }
     } catch (error) {
       console.error("Błąd akceptacji drużyny:", error);
+      setDialogError("Nie udało się połączyć z serwerem.");
     }
   };
 
@@ -514,6 +748,8 @@ const TeamsManagement = () => {
       status: "active",
     });
     setSelectedTeam(null);
+    setDialogError("");
+    setDialogSuccess("");
   };
 
   const openEditDialog = (team: Team | PendingTeam) => {
@@ -686,7 +922,10 @@ const TeamsManagement = () => {
                               </IconButton>
                               <IconButton
                                   size="small"
-                                  onClick={() => handleDeleteTeam(team.id)}
+                                  onClick={() => {
+                                    setTeamToDelete(team.id);
+                                    setConfirmOpen(true);
+                                  }}
                                   sx={{ color: "#ff6b6b" }}
                                   title="Usuń"
                               >
@@ -787,29 +1026,34 @@ const TeamsManagement = () => {
                           <TableCell align="center">
                             <Box sx={{ display: "flex", gap: 1, justifyContent: "center" }}>
                               <IconButton
-                                  size="small"
-                                  onClick={() => {
-                                    setSelectedTeam(team);
-                                    setOpenMembersDialog(true);
-                                  }}
-                                  sx={{ color: "#FF6A00" }}
-                                  title="Członkowie"
+                                size="small"
+                                onClick={() => {
+                                  setSelectedTeam(team);
+                                  setOpenMembersDialog(true);
+                                }}
+                                sx={{ color: "#FF6A00" }}
+                                title="Członkowie"
                               >
                                 <GroupIcon />
                               </IconButton>
+
                               <IconButton
-                                  size="small"
-                                  onClick={() => openEditDialog(team)}
-                                  sx={{ color: "#2196f3" }}
-                                  title="Edytuj"
+                                size="small"
+                                onClick={() => openEditDialog(team)}
+                                sx={{ color: "#2196f3" }}
+                                title="Edytuj"
                               >
                                 <EditIcon />
                               </IconButton>
+
                               <IconButton
-                                  size="small"
-                                  onClick={() => handleDeleteTeam(team.id)}
-                                  sx={{ color: "#ff6b6b" }}
-                                  title="Usuń"
+                                size="small"
+                                onClick={() => {
+                                  setTeamToDelete(team.id);
+                                  setConfirmOpen(true);
+                                }}
+                                sx={{ color: "#ff6b6b" }}
+                                title="Usuń"
                               >
                                 <DeleteIcon />
                               </IconButton>
@@ -862,6 +1106,17 @@ const TeamsManagement = () => {
           <DialogTitle>{selectedTeam ? "Edytuj drużynę" : "Dodaj nową drużynę"}</DialogTitle>
           <DialogContent>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+                {dialogError && (
+                    <Alert severity="error" sx={{ borderRadius: 2}}>
+                    {dialogError}
+                        </Alert>
+                    )}
+                {dialogSuccess && (
+                    <Alert severity="success" sx={{ borderRadius: 2}}>
+                        {dialogSuccess}
+                    </Alert>
+                    )}
+
               <TextField
                   label="Nazwa drużyny"
                   fullWidth
@@ -897,14 +1152,42 @@ const TeamsManagement = () => {
                       />
                   )}
               />
-              <TextField
-                  label="ID Kapitana (email lub ID użytkownika)"
-                  fullWidth
-                  value={formData.captainId}
-                  onChange={(e) => setFormData({ ...formData, captainId: e.target.value })}
-                  InputLabelProps={{ style: { color: "#ccc" } }}
-                  sx={{ input: { color: "#fff" } }}
-                  helperText="Podaj email lub ID użytkownika, który będzie kapitanem"
+              <Autocomplete
+                options={userOptions}
+                loading={usersLoading}
+                inputValue={formData.captainId}
+                getOptionLabel={(option) =>
+                  `${option.id} - ${option.firstName} ${option.lastName} (${option.email})`
+                }
+                onInputChange={(_event, value, reason) => {
+                  if (reason === "input") {
+                    setFormData({ ...formData, captainId: value });
+                    fetchUserSuggestions(value);
+                  }
+                }}
+                onChange={(_event, value) => {
+                  if (value) {
+                    setFormData({ ...formData, captainId: value.email });
+                  }
+                }}
+                onChange={(_event, value) => {
+                  if (value) {
+                    setFormData({ ...formData, captainId: value.email });
+                  }
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="ID Kapitana (email lub ID użytkownika)"
+                    fullWidth
+                    helperText="Zacznij wpisywać email lub ID kapitana"
+                    InputLabelProps={{ style: { color: "#ccc" } }}
+                    sx={{
+                      input: { color: "#fff" },
+                      "& .MuiFormHelperText-root": { color: "rgba(255,255,255,0.7)" },
+                    }}
+                  />
+                )}
               />
               <TextField
                   label="Opis (opcjonalny)"
@@ -955,7 +1238,51 @@ const TeamsManagement = () => {
               fetchPendingTeams();
             }}
         />
-      </Box>
+
+        <Dialog
+          open={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          PaperProps={{
+            sx: {
+              bgcolor: "rgba(0,0,0,0.9)",
+              color: "#fff",
+              borderRadius: 4,
+            },
+          }}
+        >
+          <DialogTitle>Usuń drużynę</DialogTitle>
+
+          <DialogContent>
+            <Typography>
+              Czy na pewno chcesz usunąć tę drużynę?
+            </Typography>
+          </DialogContent>
+
+          <DialogActions>
+            <Button
+              onClick={() => setConfirmOpen(false)}
+              sx={{ color: "#ccc" }}
+            >
+              Anuluj
+            </Button>
+
+            <Button
+              color="error"
+              variant="contained"
+              onClick={() => {
+                if (teamToDelete !== null) {
+                  handleDeleteTeam(teamToDelete);
+                }
+                setConfirmOpen(false);
+              }}
+            >
+              Usuń
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+
+        </Box>
   );
 };
 
