@@ -37,6 +37,7 @@ import {
 import PlayersManagement from "../components/Admin/PlayersManagement";
 import backgroundImage from "../photos/img2.jpg";
 import TeamsManagement from "../components/Admin/TeamsManagement";
+import DisciplinesManagement from "../components/Admin/DisciplinesManagement";
 
 const drawerWidth = 280;
 
@@ -72,6 +73,7 @@ const AdminPanel = () => {
         { id: "dashboard", label: "Dashboard", icon: <DashboardIcon />, category: "Główne" },
         { id: "tournaments", label: "Turnieje", icon: <TournamentIcon />, category: "Zarządzanie" },
         { id: "teams", label: "Drużyny", icon: <TeamsIcon />, category: "Zarządzanie" },
+        { id: "disciplines", label: "Dyscypliny", icon: <TournamentIcon />, category: "Zarządzanie" },
         { id: "players", label: "Zawodnicy", icon: <PlayerIcon />, category: "Zarządzanie" },
         { id: "brackets", label: "Drabinki", icon: <BracketIcon />, category: "Organizacja" },
         { id: "schedule", label: "Terminarze", icon: <ScheduleIcon />, category: "Organizacja" },
@@ -122,6 +124,8 @@ const AdminPanel = () => {
             case "players":
                 // Wywołanie wydzielonego komponentu
                 return <PlayersManagement userData={userData} />;
+            case "disciplines":
+              return <DisciplinesManagement />;
 
             default:
                 return (

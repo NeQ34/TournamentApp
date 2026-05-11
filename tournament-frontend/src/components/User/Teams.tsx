@@ -12,6 +12,7 @@ import {
   Typography,
   Chip,
   Alert,
+  Autocomplete,
 } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 
@@ -43,6 +44,10 @@ const Teams = ({ userData }: TeamsProps) => {
     description: "",
   });
 
+  const [disciplines, setDisciplines] = useState<string[]>([]);
+  const [similarDisciplines, setSimilarDisciplines] = useState<string[]>([]);
+  const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
+
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -58,8 +63,43 @@ const Teams = ({ userData }: TeamsProps) => {
     }
   };
 
+  const fetchDisciplines = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/disciplines");
+
+      if (response.ok) {
+        const data = await response.json();
+        setDisciplines(data.map((discipline: { id: number; name: string }) => discipline.name));
+      }
+    } catch (error) {
+      console.error("Błąd pobierania dyscyplin:", error);
+    }
+  };
+
+const getSimilarDisciplines = async (value: string): Promise<string[]> => {
+  if (!value.trim()) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/disciplines/similar?name=${encodeURIComponent(value)}`
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.map((discipline: { id: number; name: string }) => discipline.name);
+    }
+  } catch (error) {
+    console.error("Błąd sprawdzania podobnych dyscyplin:", error);
+  }
+
+  return [];
+};
+
   useEffect(() => {
     fetchTeams();
+    fetchDisciplines();
   }, []);
 
   const resetForm = () => {
@@ -75,6 +115,16 @@ const Teams = ({ userData }: TeamsProps) => {
   const handleSubmit = async () => {
     setSuccessMessage("");
     setErrorMessage("");
+
+    const similar = await getSimilarDisciplines(formData.sport);
+
+    if (similar.length > 0 && !ignoreSimilarDisciplines) {
+      setSimilarDisciplines(similar);
+      setError(
+        `Podobna dyscyplina już istnieje: ${similar.join(", ")}. Wybierz ją z listy albo kliknij "Użyj istniejącej".`
+      );
+      return;
+    }
 
     try {
       const response = await fetch("http://localhost:8080/api/teams/request", {
@@ -223,14 +273,73 @@ const Teams = ({ userData }: TeamsProps) => {
               sx={{ input: { color: "#fff" } }}
             />
 
-            <TextField
-              label="Dyscyplina"
-              fullWidth
-              value={formData.sport}
-              onChange={(e) => setFormData({ ...formData, sport: e.target.value })}
-              InputLabelProps={{ style: { color: "#ccc" } }}
-              sx={{ input: { color: "#fff" } }}
+            <Autocomplete
+              freeSolo
+              options={disciplines}
+              value={formData.sport || null}
+              onChange={(_event, newValue) => {
+                setFormData({ ...formData, sport: newValue || "" });
+              }}
+              onInputChange={(_event, newInputValue) => {
+                setFormData({ ...formData, sport: newInputValue });
+                setIgnoreSimilarDisciplines(false);
+              }}
+              PaperComponent={({ children }) => (
+                <Paper sx={{ bgcolor: "#1A1A1A", color: "#fff", border: "1px solid rgba(255,255,255,0.1)" }}>
+                  {children}
+                </Paper>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Dyscyplina"
+                  fullWidth
+                  helperText="Wybierz dyscyplinę z listy albo wpisz nową"
+                  InputLabelProps={{ style: { color: "#ccc" } }}
+                  sx={{
+                    input: { color: "#fff" },
+                    "& .MuiFormHelperText-root": { color: "rgba(255,255,255,0.7)" },
+                  }}
+                />
+              )}
             />
+
+            {similarDisciplines.length > 0 && (
+              <Alert
+                severity="warning"
+                sx={{ borderRadius: 2 }}
+                action={
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <Button
+                      color="inherit"
+                      size="small"
+                      onClick={() => {
+                        const selected = similarDisciplines[0];
+                        setFormData({ ...formData, sport: selected });
+                        setSimilarDisciplines([]);
+                        setIgnoreSimilarDisciplines(false);
+                      }}
+                    >
+                      Użyj istniejącej
+                    </Button>
+
+                    <Button
+                      color="inherit"
+                      size="small"
+                      onClick={() => {
+                        setIgnoreSimilarDisciplines(true);
+                        setSimilarDisciplines([]);
+                        setDialogError("");
+                      }}
+                    >
+                      Dodaj mimo to
+                    </Button>
+                  </Box>
+                }
+              >
+                Podobna dyscyplina już istnieje: {similarDisciplines.join(", ")}
+              </Alert>
+            )}
 
             <TextField
               label="Opis (opcjonalny)"

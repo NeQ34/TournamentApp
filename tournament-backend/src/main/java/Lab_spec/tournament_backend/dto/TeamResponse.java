@@ -18,4 +18,7 @@ public class TeamResponse {
     private String captainEmail;
     private Integer membersCount;
     private List<MemberResponse> members;
+    private Integer minMembers;
+    private Integer maxMembers;
+    private Boolean complete;
 }

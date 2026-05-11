@@ -16,4 +16,6 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     Optional<Team> findByIdWithMembers(@Param("id") Long id);
 
     boolean existsByName(String name);
+
+    boolean existsBySportIgnoreCase(String sport);
 }

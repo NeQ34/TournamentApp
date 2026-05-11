@@ -50,6 +50,9 @@ interface Team {
   description?: string;
   status: "active" | "inactive";
   membersCount?: number;
+  minMembers?: number;
+  maxMembers?: number;
+  complete?: boolean;
 }
 
 interface PendingTeam {
@@ -61,6 +64,9 @@ interface PendingTeam {
   description?: string;
   status: "pending";
   membersCount?: number;
+  minMembers?: number;
+  maxMembers?: number;
+  complete?: boolean;
 }
 
 interface Member {
@@ -528,11 +534,6 @@ const fetchMemberSuggestions = async (email: string) => {
       </>
   );
 };
-const sportsDictionary = [
-  "Piłka nożna", "Siatkówka", "Koszykówka", "Piłka ręczna",
-  "Tenis ziemny", "Tenis stołowy", "Szachy",
-  "E-sport: League of Legends", "E-sport: Counter-Strike 2", "E-sport: Valorant"
-];
 
 // ========== GŁÓWNY KOMPONENT ZARZĄDZANIA DRUŻYNAMI ==========
 const TeamsManagement = () => {
@@ -558,6 +559,9 @@ const TeamsManagement = () => {
   });
 const [userOptions, setUserOptions] = useState<UserSearchResult[]>([]);
 const [usersLoading, setUsersLoading] = useState(false);
+const [disciplines, setDisciplines] = useState<string[]>([]);
+const [similarDisciplines, setSimilarDisciplines] = useState<string[]>([]);
+const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
 
 
   // Funkcja filtrowania drużyn
@@ -598,6 +602,63 @@ const [usersLoading, setUsersLoading] = useState(false);
     }
   };
 
+  const fetchDisciplines = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/disciplines");
+
+      if (response.ok) {
+        const data = await response.json();
+        setDisciplines(data.map((discipline: { id: number; name: string }) => discipline.name));
+      }
+    } catch (error) {
+      console.error("Błąd pobierania dyscyplin:", error);
+    }
+  };
+
+  const checkSimilarDisciplines = async (value: string) => {
+    if (!value.trim()) {
+      setSimilarDisciplines([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/disciplines/similar?name=${encodeURIComponent(value)}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+
+        setSimilarDisciplines(
+          data.map((discipline: { id: number; name: string }) => discipline.name)
+        );
+      }
+    } catch (error) {
+      console.error("Błąd sprawdzania podobnych dyscyplin:", error);
+    }
+  };
+
+  const getSimilarDisciplines = async (value: string): Promise<string[]> => {
+    if (!value.trim()) {
+      return [];
+    }
+
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/disciplines/similar?name=${encodeURIComponent(value)}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.map((discipline: { id: number; name: string }) => discipline.name);
+      }
+    } catch (error) {
+      console.error("Błąd sprawdzania podobnych dyscyplin:", error);
+    }
+
+    return [];
+  };
+
   const fetchUserSuggestions = async (email: string) => {
     if (!email.trim()) {
       setUserOptions([]);
@@ -634,6 +695,13 @@ const [usersLoading, setUsersLoading] = useState(false);
     setDialogError("");
     setDialogSuccess("");
 
+    const similar = await getSimilarDisciplines(formData.sport);
+
+    if (similar.length > 0 && !ignoreSimilarDisciplines) {
+      setSimilarDisciplines(similar);
+      return;
+    }
+
     try {
       const response = await fetch("http://localhost:8080/api/admin/teams", {
         method: "POST",
@@ -647,6 +715,7 @@ const [usersLoading, setUsersLoading] = useState(false);
       if (response.ok) {
         fetchTeams();
         fetchPendingTeams();
+        fetchDisciplines();
         setOpenDialog(false);
         resetForm();
       } else {
@@ -665,6 +734,13 @@ const [usersLoading, setUsersLoading] = useState(false);
     setDialogError("");
     setDialogSuccess("");
 
+    const similar = await getSimilarDisciplines(formData.sport);
+
+    if (similar.length > 0 && !ignoreSimilarDisciplines) {
+      setSimilarDisciplines(similar);
+      return;
+    }
+
     try {
       const response = await fetch(`http://localhost:8080/api/admin/teams/${selectedTeam.id}`, {
         method: "PUT",
@@ -678,6 +754,7 @@ const [usersLoading, setUsersLoading] = useState(false);
       if (response.ok) {
         fetchTeams();
         fetchPendingTeams();
+        fetchDisciplines();
         setOpenDialog(false);
         resetForm();
       } else {
@@ -728,6 +805,7 @@ const [usersLoading, setUsersLoading] = useState(false);
       if (response.ok) {
         fetchTeams();
         fetchPendingTeams();
+        fetchDisciplines();
         setDialogSuccess("Drużyna została zaakceptowana.");
       } else {
         const errorData = await response.json();
@@ -776,11 +854,28 @@ const [usersLoading, setUsersLoading] = useState(false);
   useEffect(() => {
     fetchTeams();
     fetchPendingTeams();
+    fetchDisciplines();
   }, []);
 
+useEffect(() => {
+  if (!dialogError && !dialogSuccess) return;
+
+  const timer = setTimeout(() => {
+    setDialogError("");
+    setDialogSuccess("");
+  }, 3000);
+
+  return () => clearTimeout(timer);
+}, [dialogError, dialogSuccess]);
+
   // Filtrowane listy
-  const filteredPending = filterTeams(pendingTeams);
-  const filteredActive = filterTeams(teams);
+  const filteredPending = filterTeams(pendingTeams).sort((a, b) =>
+    a.name.localeCompare(b.name, "pl", { sensitivity: "base" })
+  );
+
+  const filteredActive = filterTeams(teams).sort((a, b) =>
+    a.name.localeCompare(b.name, "pl", { sensitivity: "base" })
+  );
 
   // Paginacja
   const paginatedPending = filteredPending.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
@@ -1009,19 +1104,49 @@ const [usersLoading, setUsersLoading] = useState(false);
                           <TableCell sx={{ color: "#fff", fontWeight: 600 }}>{team.name}</TableCell>
                           <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.sport}</TableCell>
                           <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.captainName}</TableCell>
-                          <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{team.membersCount || 0}</TableCell>
+                          <TableCell>
+                            <Typography
+                              sx={{
+                                color: team.complete ? "#4caf50" : "#ff6b6b",
+                                fontWeight: 700,
+                                fontSize: "1rem",
+                              }}
+                            >
+                              {team.membersCount || 0}
+                            </Typography>
+
+                            <Typography
+                              variant="caption"
+                              sx={{ color: "rgba(255,255,255,0.6)" }}
+                            >
+                              minimum: {team.minMembers ?? "-"} • maksimum: {team.maxMembers ?? "-"}
+                            </Typography>
+                          </TableCell>
                           <TableCell sx={{ color: "rgba(255,255,255,0.7)" }}>
                             {team.description && team.description.length > 50 ? team.description.substring(0, 50) + "..." : team.description || "-"}
                           </TableCell>
                           <TableCell>
-                            <Chip
+                            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                              <Chip
                                 label="Aktywna"
                                 size="small"
                                 sx={{
                                   bgcolor: "rgba(76, 175, 80, 0.2)",
                                   color: "#4caf50",
                                 }}
-                            />
+                              />
+
+                              <Chip
+                                label={team.complete ? "Kompletna" : "Niekompletna"}
+                                size="small"
+                                sx={{
+                                  bgcolor: team.complete
+                                    ? "rgba(76, 175, 80, 0.2)"
+                                    : "rgba(255, 107, 107, 0.15)",
+                                  color: team.complete ? "#4caf50" : "#ff6b6b",
+                                }}
+                              />
+                            </Box>
                           </TableCell>
                           <TableCell align="center">
                             <Box sx={{ display: "flex", gap: 1, justifyContent: "center" }}>
@@ -1126,10 +1251,15 @@ const [usersLoading, setUsersLoading] = useState(false);
                   sx={{ input: { color: "#fff" } }}
               />
               <Autocomplete
-                  options={sportsDictionary}
+                  freeSolo
+                  options={disciplines}
                   value={formData.sport || null}
                   onChange={(_event, newValue) => {
                     setFormData({ ...formData, sport: newValue || "" });
+                  }}
+                  onInputChange={(_event, newInputValue) => {
+                    setFormData({ ...formData, sport: newInputValue });
+                    setIgnoreSimilarDisciplines(false);
                   }}
                   PaperComponent={({ children }) => (
                       <Paper sx={{ bgcolor: "#1A1A1A", color: "#fff", border: "1px solid rgba(255,255,255,0.1)" }}>
@@ -1152,6 +1282,44 @@ const [usersLoading, setUsersLoading] = useState(false);
                       />
                   )}
               />
+
+              {similarDisciplines.length > 0 && (
+                <Alert
+                  severity="warning"
+                  sx={{ borderRadius: 2 }}
+                  action={
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={() => {
+                          const selected = similarDisciplines[0];
+                          setFormData({ ...formData, sport: selected });
+                          setSimilarDisciplines([]);
+                          setIgnoreSimilarDisciplines(false);
+                        }}
+                      >
+                        Użyj istniejącej
+                      </Button>
+
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={() => {
+                          setIgnoreSimilarDisciplines(true);
+                          setSimilarDisciplines([]);
+                          setDialogError("");
+                        }}
+                      >
+                        Dodaj mimo to
+                      </Button>
+                    </Box>
+                  }
+                >
+                  Podobna dyscyplina już istnieje: {similarDisciplines.join(", ")}
+                </Alert>
+              )}
+
               <Autocomplete
                 options={userOptions}
                 loading={usersLoading}

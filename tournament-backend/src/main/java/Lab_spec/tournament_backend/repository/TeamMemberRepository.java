@@ -21,4 +21,14 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     void deleteByTeamIdAndUserId(@Param("teamId") Long teamId, @Param("userId") Long userId);
 
     boolean existsByTeamIdAndUserId(Long teamId, Long userId);
+
+    @Query("""
+       SELECT COUNT(tm)
+       FROM TeamMember tm
+       WHERE LOWER(tm.team.sport) = LOWER(:sport)
+       GROUP BY tm.team.id
+       ORDER BY COUNT(tm) DESC
+       LIMIT 1
+       """)
+    Integer findMaxMembersCountBySport(@Param("sport") String sport);
 }

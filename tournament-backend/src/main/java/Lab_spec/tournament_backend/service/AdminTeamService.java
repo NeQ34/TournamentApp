@@ -10,6 +10,7 @@ import Lab_spec.tournament_backend.model.User;
 import Lab_spec.tournament_backend.repository.TeamMemberRepository;
 import Lab_spec.tournament_backend.repository.TeamRepository;
 import Lab_spec.tournament_backend.repository.UserRepository;
+import Lab_spec.tournament_backend.model.Discipline;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
@@ -22,13 +23,16 @@ public class AdminTeamService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final DisciplineService disciplineService;
 
     public AdminTeamService(TeamRepository teamRepository,
                             UserRepository userRepository,
-                            TeamMemberRepository teamMemberRepository) {
+                            TeamMemberRepository teamMemberRepository,
+                            DisciplineService disciplineService) {
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
         this.teamMemberRepository = teamMemberRepository;
+        this.disciplineService = disciplineService;
     }
 
     public List<TeamResponse> getAllTeams() {
@@ -53,7 +57,7 @@ public class AdminTeamService {
 
         Team team = new Team();
         team.setName(request.getName());
-        team.setSport(request.getSport());
+        team.setSport(disciplineService.getOrCreateDisciplineName(request.getSport()));
         team.setDescription(request.getDescription());
         team.setStatus(request.getStatus());
         team.setCaptain(captain);
@@ -75,7 +79,7 @@ public class AdminTeamService {
                 .orElseThrow(() -> new RuntimeException("Drużyna nie znaleziona"));
 
         team.setName(request.getName());
-        team.setSport(request.getSport());
+        team.setSport(disciplineService.getOrCreateDisciplineName(request.getSport()));
         team.setDescription(request.getDescription());
         team.setStatus(request.getStatus());
 
@@ -111,6 +115,19 @@ public class AdminTeamService {
     public void addMember(Long teamId, String email) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new RuntimeException("Drużyna nie znaleziona"));
+
+        Discipline discipline = disciplineService.findByName(team.getSport());
+
+        if (discipline.getMaxMembers() != null) {
+            int currentMembersCount = teamMemberRepository.findByTeamId(teamId).size();
+
+            if (currentMembersCount >= discipline.getMaxMembers()) {
+                throw new RuntimeException(
+                        "Nie można dodać zawodnika. Maksymalna liczba członków dla tej dyscypliny to "
+                                + discipline.getMaxMembers() + "."
+                );
+            }
+        }
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Użytkownik nie znaleziony"));
@@ -207,7 +224,7 @@ public class AdminTeamService {
 
         Team team = new Team();
         team.setName(request.getName());
-        team.setSport(request.getSport());
+        team.setSport(request.getSport().trim());
         team.setDescription(request.getDescription());
         team.setStatus("pending");
         team.setCaptain(captain);
@@ -240,6 +257,7 @@ public class AdminTeamService {
         Team team = teamRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Drużyna nie znaleziona"));
 
+        team.setSport(disciplineService.getOrCreateDisciplineName(team.getSport()));
         team.setStatus("active");
 
         Team updatedTeam = teamRepository.save(team);
@@ -289,6 +307,23 @@ public class AdminTeamService {
         }
 
         response.setMembersCount(team.getMembers().size());
+
+        try {
+            Discipline discipline = disciplineService.findByName(team.getSport());
+
+            response.setMinMembers(discipline.getMinMembers());
+            response.setMaxMembers(discipline.getMaxMembers());
+
+            int membersCount = team.getMembers().size();
+            boolean complete = discipline.getMinMembers() != null
+                    && membersCount >= discipline.getMinMembers();
+
+            response.setComplete(complete);
+        } catch (RuntimeException e) {
+            response.setMinMembers(null);
+            response.setMaxMembers(null);
+            response.setComplete(false);
+        }
 
         List<MemberResponse> members = team.getMembers().stream()
                 .map(this::convertToMemberResponse)
