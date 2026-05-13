@@ -138,7 +138,6 @@ const AdminPanel = () => {
                 );
         }
     };
-
     const drawer = (
         <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <Box sx={{ p: 3, textAlign: "center" }}>

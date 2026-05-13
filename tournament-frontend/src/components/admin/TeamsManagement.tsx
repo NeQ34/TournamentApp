@@ -1338,11 +1338,6 @@ useEffect(() => {
                     setFormData({ ...formData, captainId: value.email });
                   }
                 }}
-                onChange={(_event, value) => {
-                  if (value) {
-                    setFormData({ ...formData, captainId: value.email });
-                  }
-                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
