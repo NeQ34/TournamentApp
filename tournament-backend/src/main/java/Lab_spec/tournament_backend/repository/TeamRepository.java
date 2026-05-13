@@ -18,4 +18,5 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     boolean existsByName(String name);
 
     boolean existsBySportIgnoreCase(String sport);
+    List<Team> findByStatusAndSport(String status, String sport);
 }

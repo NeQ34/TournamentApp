@@ -4,14 +4,18 @@ import Lab_spec.tournament_backend.dto.MemberResponse;
 import Lab_spec.tournament_backend.dto.TeamRequest;
 import Lab_spec.tournament_backend.dto.TeamResponse;
 import Lab_spec.tournament_backend.dto.UserSearchResponse;
+import Lab_spec.tournament_backend.model.Team;
+import Lab_spec.tournament_backend.repository.TeamRepository;
 import Lab_spec.tournament_backend.service.AdminTeamService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -19,9 +23,11 @@ import java.util.Map;
 public class AdminTeamController {
 
     private final AdminTeamService adminTeamService;
+    private final TeamRepository teamRepository;
 
-    public AdminTeamController(AdminTeamService adminTeamService) {
+    public AdminTeamController(AdminTeamService adminTeamService, TeamRepository teamRepository) {
         this.adminTeamService = adminTeamService;
+        this.teamRepository = teamRepository;
     }
 
     @GetMapping("/teams")
@@ -98,5 +104,23 @@ public class AdminTeamController {
     @PutMapping("/teams/{id}/approve")
     public ResponseEntity<TeamResponse> approveTeam(@PathVariable Long id) {
         return ResponseEntity.ok(adminTeamService.approveTeam(id));
+    }
+
+    @GetMapping("/teams/available")
+    public ResponseEntity<?> getAvailableTeamsByDiscipline(@RequestParam String discipline) {
+        List<Team> teams = teamRepository.findByStatusAndSport("active", discipline);
+
+        // Prosta konwersja ręczna – bez cykli
+        List<Map<String, Object>> response = teams.stream().map(team -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", team.getId());
+            map.put("name", team.getName());
+            map.put("sport", team.getSport());
+            map.put("captainName", team.getCaptain().getFirstName() + " " + team.getCaptain().getLastName());
+            map.put("membersCount", team.getMembers().size());
+            return map;
+        }).collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
     }
 }
