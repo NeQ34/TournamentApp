@@ -85,11 +85,6 @@ public class AdminTeamController {
         return ResponseEntity.ok(adminTeamService.searchUserByEmail(email));
     }
 
-    @GetMapping("/users/suggestions")
-    public ResponseEntity<List<UserSearchResponse>> searchUsersSuggestions(@RequestParam String email) {
-        return ResponseEntity.ok(adminTeamService.searchUsersByEmailFragment(email));
-    }
-
     @GetMapping("/teams/pending")
     public ResponseEntity<List<TeamResponse>> getPendingTeams() {
         return ResponseEntity.ok(adminTeamService.getPendingTeams());
