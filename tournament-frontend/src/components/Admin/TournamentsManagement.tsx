@@ -30,7 +30,7 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
+  CircularProgress,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -38,6 +38,7 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   GroupAdd as GroupAddIcon,
+  EmojiEvents as EmojiEventsIcon,
 } from "@mui/icons-material";
 
 interface Tournament {
@@ -45,7 +46,7 @@ interface Tournament {
   name: string;
   discipline: string;
   startDate: string;
-  endDate: string;
+  endDate?: string;
   location?: string;
   description?: string;
   status: "planned" | "ongoing" | "finished" | "archived";
@@ -59,6 +60,18 @@ interface Team {
   sport: string;
   captainName: string;
   membersCount: number;
+}
+
+interface Match {
+  id: number;
+  roundNumber: number;
+  matchOrder: number;
+  teamA: { id: number; name: string } | null;
+  teamB: { id: number; name: string } | null;
+  result: string | null;
+  status: string;
+  winnerId: number | null;
+  nextMatchId: number | null;
 }
 
 const TournamentsManagement = () => {
@@ -75,14 +88,6 @@ const TournamentsManagement = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  interface AvailableTeam {
-    id: number;
-    name: string;
-    sport: string;
-    captainName: string;
-    membersCount: number;
-}
-
   // Formularz
   const [formData, setFormData] = useState({
     name: "",
@@ -98,25 +103,31 @@ const TournamentsManagement = () => {
   // Zakładki w szczegółach turnieju
   const [selectedTournamentForDetails, setSelectedTournamentForDetails] = useState<Tournament | null>(null);
   const [tabValue, setTabValue] = useState(0);
-  const [availableTeams, setAvailableTeams] = useState<AvailableTeam[]>([]);
+  const [availableTeams, setAvailableTeams] = useState<Team[]>([]);
   const [registeredTeams, setRegisteredTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
+
+  // Drabinka
+  const [bracket, setBracket] = useState<Match[]>([]);
+  const [bracketLoading, setBracketLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [randomize, setRandomize] = useState(false);
+  const [scoreDialogOpen, setScoreDialogOpen] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [score, setScore] = useState("");
+  const [winnerId, setWinnerId] = useState<number | null>(null);
 
   // Filtrowanie
   const filterTournaments = (list: Tournament[]) => {
     if (!searchTerm) return list;
-    return list.filter((t) =>
-      t.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    return list.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
   };
 
-  // Pobieranie turniejów
+  // ========== POBIERANIE DANYCH ==========
   const fetchTournaments = async () => {
     try {
       const response = await fetch("http://localhost:8080/api/admin/tournaments", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (response.ok) {
         const data = await response.json();
@@ -129,7 +140,6 @@ const TournamentsManagement = () => {
     }
   };
 
-  // Pobieranie dyscyplin
   const fetchDisciplines = async () => {
     try {
       const response = await fetch("http://localhost:8080/api/disciplines");
@@ -142,19 +152,14 @@ const TournamentsManagement = () => {
     }
   };
 
-  // Pobieranie dostępnych drużyn (aktywne, w danej dyscyplinie)
   const fetchAvailableTeams = async (discipline: string) => {
     if (!discipline) return;
     setTeamsLoading(true);
     try {
       const response = await fetch(
         `http://localhost:8080/api/admin/teams/available?discipline=${encodeURIComponent(discipline)}`,
-        {
-            headers: {
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-        }
-    );
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
       if (response.ok) {
         const data = await response.json();
         setAvailableTeams(data);
@@ -166,17 +171,12 @@ const TournamentsManagement = () => {
     }
   };
 
-  // Pobieranie zgłoszonych drużyn do turnieju
   const fetchRegisteredTeams = async (tournamentId: number) => {
     setTeamsLoading(true);
     try {
       const response = await fetch(
         `http://localhost:8080/api/admin/tournaments/${tournamentId}/teams`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );
       if (response.ok) {
         const data = await response.json();
@@ -189,67 +189,25 @@ const TournamentsManagement = () => {
     }
   };
 
-  // Dodawanie drużyny do turnieju
-  const handleAddTeamToTournament = async (teamId: number) => {
-    if (!selectedTournamentForDetails) return;
-
+  const fetchBracket = async (tournamentId: number) => {
+    setBracketLoading(true);
     try {
       const response = await fetch(
-        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
+        `http://localhost:8080/api/admin/tournaments/${tournamentId}/bracket`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );
-
       if (response.ok) {
-        fetchRegisteredTeams(selectedTournamentForDetails.id);
-        fetchAvailableTeams(selectedTournamentForDetails.discipline);
-        fetchTournaments();
-        setDialogSuccess("Drużyna została dodana do turnieju.");
-      } else {
-        const error = await response.json();
-        setDialogError(error.message || "Nie udało się dodać drużyny.");
+        const data = await response.json();
+        setBracket(data);
       }
     } catch (error) {
-      console.error("Błąd dodawania drużyny:", error);
-      setDialogError("Nie udało się połączyć z serwerem.");
+      console.error("Błąd pobierania drabinki:", error);
+    } finally {
+      setBracketLoading(false);
     }
   };
 
-  // Usuwanie drużyny z turnieju
-  const handleRemoveTeamFromTournament = async (teamId: number) => {
-    if (!selectedTournamentForDetails) return;
-
-    try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        fetchRegisteredTeams(selectedTournamentForDetails.id);
-        fetchAvailableTeams(selectedTournamentForDetails.discipline);
-        fetchTournaments();
-        setDialogSuccess("Drużyna została usunięta z turnieju.");
-      } else {
-        const error = await response.json();
-        setDialogError(error.message || "Nie udało się usunąć drużyny.");
-      }
-    } catch (error) {
-      console.error("Błąd usuwania drużyny:", error);
-      setDialogError("Nie udało się połączyć z serwerem.");
-    }
-  };
-
-  // Dodawanie / edycja turnieju
+  // ========== OPERACJE NA TURNIEJACH ==========
   const handleSaveTournament = async () => {
     setDialogError("");
     setDialogSuccess("");
@@ -270,7 +228,6 @@ const TournamentsManagement = () => {
     const url = selectedTournament
       ? `http://localhost:8080/api/admin/tournaments/${selectedTournament.id}`
       : "http://localhost:8080/api/admin/tournaments";
-
     const method = selectedTournament ? "PUT" : "POST";
 
     try {
@@ -310,15 +267,11 @@ const TournamentsManagement = () => {
 
   const handleDeleteTournament = async () => {
     if (!tournamentToDelete) return;
-
     try {
       const response = await fetch(`http://localhost:8080/api/admin/tournaments/${tournamentToDelete}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-
       if (response.ok) {
         fetchTournaments();
         setDialogSuccess("Turniej został usunięty.");
@@ -335,13 +288,105 @@ const TournamentsManagement = () => {
     }
   };
 
-  const openDetailsDialog = (tournament: Tournament) => {
-    setSelectedTournamentForDetails(tournament);
-    setTabValue(0);
-    fetchAvailableTeams(tournament.discipline);
-    fetchRegisteredTeams(tournament.id);
+  // ========== ZARZĄDZANIE DRUŻYNAMI W TURNIEJU ==========
+  const handleAddTeamToTournament = async (teamId: number) => {
+    if (!selectedTournamentForDetails) return;
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
+        { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      if (response.ok) {
+        fetchRegisteredTeams(selectedTournamentForDetails.id);
+        fetchAvailableTeams(selectedTournamentForDetails.discipline);
+        fetchTournaments();
+        setDialogSuccess("Drużyna została dodana do turnieju.");
+      } else {
+        const error = await response.json();
+        setDialogError(error.message || "Nie udało się dodać drużyny.");
+      }
+    } catch (error) {
+      console.error("Błąd dodawania drużyny:", error);
+      setDialogError("Nie udało się połączyć z serwerem.");
+    }
   };
 
+  const handleRemoveTeamFromTournament = async (teamId: number) => {
+    if (!selectedTournamentForDetails) return;
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      if (response.ok) {
+        fetchRegisteredTeams(selectedTournamentForDetails.id);
+        fetchAvailableTeams(selectedTournamentForDetails.discipline);
+        fetchTournaments();
+        setDialogSuccess("Drużyna została usunięta z turnieju.");
+      } else {
+        const error = await response.json();
+        setDialogError(error.message || "Nie udało się usunąć drużyny.");
+      }
+    } catch (error) {
+      console.error("Błąd usuwania drużyny:", error);
+      setDialogError("Nie udało się połączyć z serwerem.");
+    }
+  };
+
+  // ========== DRABINKA ==========
+  const handleGenerateBracket = async () => {
+    if (!selectedTournamentForDetails) return;
+    setGenerating(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/generate-bracket?randomize=${randomize}`,
+        { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      if (response.ok) {
+        await fetchBracket(selectedTournamentForDetails.id);
+        setDialogSuccess("Drabinka została wygenerowana.");
+      } else {
+        const error = await response.json();
+        setDialogError(error.message || "Błąd generowania drabinki");
+      }
+    } catch (error) {
+      console.error("Błąd:", error);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSaveScore = async () => {
+    if (!selectedMatch || !winnerId) return;
+    try {
+      const response = await fetch(
+        `http://localhost:8080/api/admin/tournaments/matches/${selectedMatch.id}/result`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify({ result: score, winnerId }),
+        }
+      );
+      if (response.ok) {
+        await fetchBracket(selectedTournamentForDetails!.id);
+        setScoreDialogOpen(false);
+        setSelectedMatch(null);
+        setScore("");
+        setWinnerId(null);
+        setDialogSuccess("Wynik został zapisany.");
+      } else {
+        const error = await response.json();
+        setDialogError(error.message || "Błąd zapisu wyniku");
+      }
+    } catch (error) {
+      console.error("Błąd:", error);
+    }
+  };
+
+  // ========== POMOCNICZE ==========
   const resetForm = () => {
     setFormData({
       name: "",
@@ -373,6 +418,14 @@ const TournamentsManagement = () => {
     setOpenDialog(true);
   };
 
+  const openDetailsDialog = (tournament: Tournament) => {
+    setSelectedTournamentForDetails(tournament);
+    setTabValue(0);
+    fetchRegisteredTeams(tournament.id);
+    fetchAvailableTeams(tournament.discipline);
+    fetchBracket(tournament.id);
+  };
+
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
@@ -380,6 +433,21 @@ const TournamentsManagement = () => {
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "planned":
+        return { label: "Planowany", color: "#2196f3" };
+      case "ongoing":
+        return { label: "Trwający", color: "#ff9800" };
+      case "finished":
+        return { label: "Zakończony", color: "#4caf50" };
+      case "archived":
+        return { label: "Archiwalny", color: "#9e9e9e" };
+      default:
+        return { label: status, color: "#fff" };
+    }
   };
 
   useEffect(() => {
@@ -400,21 +468,6 @@ const TournamentsManagement = () => {
     a.name.localeCompare(b.name, "pl", { sensitivity: "base" })
   );
   const paginatedTournaments = filteredTournaments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "planned":
-        return { label: "Planowany", color: "#2196f3" };
-      case "ongoing":
-        return { label: "Trwający", color: "#ff9800" };
-      case "finished":
-        return { label: "Zakończony", color: "#4caf50" };
-      case "archived":
-        return { label: "Archiwalny", color: "#9e9e9e" };
-      default:
-        return { label: status, color: "#fff" };
-    }
-  };
 
   if (loading) {
     return (
@@ -634,8 +687,8 @@ const TournamentsManagement = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog zarządzania drużynami w turnieju */}
-      <Dialog open={!!selectedTournamentForDetails} onClose={() => setSelectedTournamentForDetails(null)} maxWidth="md" fullWidth
+      {/* Dialog zarządzania turniejem (szczegóły) */}
+      <Dialog open={!!selectedTournamentForDetails} onClose={() => setSelectedTournamentForDetails(null)} maxWidth="lg" fullWidth
         PaperProps={{ sx: { bgcolor: "rgba(0,0,0,0.9)", color: "#fff", borderRadius: 4 } }}>
         <DialogTitle>
           Zarządzanie turniejem: {selectedTournamentForDetails?.name}
@@ -645,10 +698,12 @@ const TournamentsManagement = () => {
         </DialogTitle>
         <DialogContent>
           <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} sx={{ borderBottom: "1px solid rgba(255,255,255,0.1)", mb: 2 }}>
-            <Tab label="Zgłoszone drużyny" sx={{ color: "#fff" }} />
-            <Tab label="Dostępne drużyny" sx={{ color: "#fff" }} />
+            <Tab label="Drużyny" sx={{ color: "#fff" }} />
+            <Tab label="Drabinka" sx={{ color: "#fff" }} />
+            <Tab label="Wyniki" sx={{ color: "#fff" }} />
           </Tabs>
 
+          {/* Zakładka: Drużyny */}
           {tabValue === 0 && (
             <>
               <Typography variant="subtitle2" sx={{ color: "rgba(255,255,255,0.7)", mb: 1 }}>
@@ -666,21 +721,15 @@ const TournamentsManagement = () => {
                         primary={<Typography sx={{ color: "#fff" }}>{team.name}</Typography>}
                         secondary={`Kapitan: ${team.captainName} • Członków: ${team.membersCount}`}
                       />
-                      <ListItemSecondaryAction>
-                        <IconButton edge="end" onClick={() => handleRemoveTeamFromTournament(team.id)} sx={{ color: "#ff6b6b" }}>
-                          <DeleteIcon />
-                        </IconButton>
-                      </ListItemSecondaryAction>
+                      <IconButton edge="end" onClick={() => handleRemoveTeamFromTournament(team.id)} sx={{ color: "#ff6b6b" }}>
+                        <DeleteIcon />
+                      </IconButton>
                     </ListItem>
                   ))}
                 </List>
               )}
-            </>
-          )}
 
-          {tabValue === 1 && (
-            <>
-              <Typography variant="subtitle2" sx={{ color: "rgba(255,255,255,0.7)", mb: 1 }}>
+              <Typography variant="subtitle2" sx={{ color: "rgba(255,255,255,0.7)", mt: 3, mb: 1 }}>
                 Dostępne drużyny w dyscyplinie {selectedTournamentForDetails?.discipline} ({availableTeams.length})
               </Typography>
               {teamsLoading ? (
@@ -695,20 +744,149 @@ const TournamentsManagement = () => {
                         primary={<Typography sx={{ color: "#fff" }}>{team.name}</Typography>}
                         secondary={`Kapitan: ${team.captainName} • Członków: ${team.membersCount}`}
                       />
-                      <ListItemSecondaryAction>
-                        <IconButton edge="end" onClick={() => handleAddTeamToTournament(team.id)} sx={{ color: "#4caf50" }}>
-                          <AddIcon />
-                        </IconButton>
-                      </ListItemSecondaryAction>
+                      <IconButton edge="end" onClick={() => handleAddTeamToTournament(team.id)} sx={{ color: "#4caf50" }}>
+                        <AddIcon />
+                      </IconButton>
                     </ListItem>
                   ))}
                 </List>
               )}
             </>
           )}
+
+          {/* Zakładka: Drabinka */}
+          {tabValue === 1 && (
+            <Box>
+              <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
+                <Button
+                  variant="contained"
+                  onClick={handleGenerateBracket}
+                  disabled={generating || bracket.length > 0}
+                  startIcon={generating ? <CircularProgress size={20} /> : <EmojiEventsIcon />}
+                  sx={{ bgcolor: "#FF6A00" }}
+                >
+                  {generating ? "Generowanie..." : "Generuj drabinkę"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setRandomize(!randomize)}
+                  sx={{ color: randomize ? "#FF6A00" : "#fff", borderColor: "#FF6A00" }}
+                >
+                  Losuj pary: {randomize ? "TAK" : "NIE"}
+                </Button>
+              </Box>
+
+              {bracketLoading && <Typography sx={{ textAlign: "center", py: 4 }}>Ładowanie drabinki...</Typography>}
+
+              {!bracketLoading && bracket.length === 0 && !generating && (
+                <Paper sx={{ p: 4, textAlign: "center", bgcolor: "rgba(0,0,0,0.5)" }}>
+                  <Typography>Drabinka nie została jeszcze wygenerowana. Kliknij przycisk powyżej.</Typography>
+                </Paper>
+              )}
+
+              {bracket.length > 0 && (
+                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
+                  {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => (
+                    <Box key={round} sx={{ width: "100%" }}>
+                      <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
+                        Runda {round}
+                      </Typography>
+                      <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
+                        {bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder).map(match => (
+                          <Paper key={match.id} sx={{ p: 2, minWidth: 200, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)" }}>
+                            <Typography>{match.teamA?.name || "BYE"}</Typography>
+                            <Typography variant="h6">vs</Typography>
+                            <Typography>{match.teamB?.name || "BYE"}</Typography>
+                            {match.result && <Typography sx={{ color: "#4caf50", mt: 1 }}>Wynik: {match.result}</Typography>}
+                            {match.status === "pending" && match.teamA && match.teamB && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => {
+                                  setSelectedMatch(match);
+                                  setScoreDialogOpen(true);
+                                }}
+                                sx={{ mt: 1, color: "#FF6A00" }}
+                              >
+                                Wprowadź wynik
+                              </Button>
+                            )}
+                            {match.winnerId && <Chip label="Rozegrany" size="small" sx={{ mt: 1 }} />}
+                          </Paper>
+                        ))}
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {/* Zakładka: Wyniki */}
+          {tabValue === 2 && (
+            <Box>
+              {bracketLoading && <Typography>Ładowanie...</Typography>}
+              {!bracketLoading && bracket.length === 0 && <Typography>Brak wygenerowanej drabinki.</Typography>}
+              {bracket.filter(m => m.teamA && m.teamB).map(match => (
+                <Paper key={match.id} sx={{ p: 2, mb: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography>{match.teamA!.name} vs {match.teamB!.name}</Typography>
+                  {match.result ? (
+                    <Typography sx={{ color: "#4caf50" }}>Wynik: {match.result}</Typography>
+                  ) : (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => {
+                        setSelectedMatch(match);
+                        setScoreDialogOpen(true);
+                      }}
+                      sx={{ bgcolor: "#FF6A00" }}
+                    >
+                      Wprowadź wynik
+                    </Button>
+                  )}
+                </Paper>
+              ))}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSelectedTournamentForDetails(null)} sx={{ color: "#ccc" }}>Zamknij</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog wprowadzania wyniku */}
+      <Dialog open={scoreDialogOpen} onClose={() => setScoreDialogOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { bgcolor: "rgba(0,0,0,0.9)", color: "#fff", borderRadius: 4 } }}>
+        <DialogTitle>Wprowadź wynik</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            {selectedMatch?.teamA?.name} vs {selectedMatch?.teamB?.name}
+          </Typography>
+          <TextField
+            fullWidth
+            label="Wynik (np. 3:1)"
+            value={score}
+            onChange={(e) => setScore(e.target.value)}
+            sx={{ mb: 2 }}
+            InputLabelProps={{ style: { color: "#ccc" } }}
+          />
+          <FormControl fullWidth>
+            <InputLabel sx={{ color: "#ccc" }}>Zwycięzca</InputLabel>
+            <Select
+              value={winnerId || ""}
+              onChange={(e) => setWinnerId(Number(e.target.value))}
+              label="Zwycięzca"
+              sx={{ color: "#fff" }}
+            >
+              <MenuItem value={selectedMatch?.teamA?.id}>{selectedMatch?.teamA?.name}</MenuItem>
+              <MenuItem value={selectedMatch?.teamB?.id}>{selectedMatch?.teamB?.name}</MenuItem>
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setScoreDialogOpen(false)} sx={{ color: "#ccc" }}>Anuluj</Button>
+          <Button onClick={handleSaveScore} variant="contained" sx={{ bgcolor: "#FF6A00" }}>Zapisz</Button>
         </DialogActions>
       </Dialog>
 

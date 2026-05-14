@@ -2,8 +2,10 @@ package Lab_spec.tournament_backend.controller;
 
 import Lab_spec.tournament_backend.dto.TournamentRequest;
 import Lab_spec.tournament_backend.dto.TournamentResponse;
+import Lab_spec.tournament_backend.model.Match;
 import Lab_spec.tournament_backend.model.Team;
 import Lab_spec.tournament_backend.repository.TeamRepository;
+import Lab_spec.tournament_backend.service.BracketService;
 import Lab_spec.tournament_backend.service.TournamentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -21,11 +23,11 @@ import java.util.stream.Collectors;
 public class TournamentController {
 
     private final TournamentService tournamentService;
-    private final TeamRepository teamRepository;
+    private final BracketService bracketService;
 
-    public TournamentController(TournamentService tournamentService, TeamRepository teamRepository) {
+    public TournamentController(TournamentService tournamentService, BracketService bracketService) {
         this.tournamentService = tournamentService;
-        this.teamRepository = teamRepository;
+        this.bracketService = bracketService;
     }
 
     // Pobierz wszystkie turnieje
@@ -106,5 +108,58 @@ public class TournamentController {
                                                          @PathVariable Long teamId) {
         tournamentService.removeTeamFromTournament(tournamentId, teamId);
         return ResponseEntity.noContent().build();
+    }
+
+    // Generowanie drabinki
+    @PostMapping("/{id}/generate-bracket")
+    public ResponseEntity<?> generateBracket(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean randomize) {
+        try {
+            bracketService.generateBracket(id, randomize);
+            return ResponseEntity.ok(Map.of("message", "Drabinka została wygenerowana"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // Pobranie drabinki
+    @GetMapping("/{id}/bracket")
+    public ResponseEntity<?> getBracket(@PathVariable Long id) {
+        List<Match> matches = bracketService.getBracket(id);
+
+        List<Map<String, Object>> response = matches.stream().map(match -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", match.getId());
+            map.put("roundNumber", match.getRoundNumber());
+            map.put("matchOrder", match.getMatchOrder());
+            map.put("teamA", match.getTeamA() != null ? Map.of(
+                    "id", match.getTeamA().getId(),
+                    "name", match.getTeamA().getName()
+            ) : null);
+            map.put("teamB", match.getTeamB() != null ? Map.of(
+                    "id", match.getTeamB().getId(),
+                    "name", match.getTeamB().getName()
+            ) : null);
+            map.put("result", match.getResult());
+            map.put("status", match.getStatus());
+            map.put("winnerId", match.getWinner() != null ? match.getWinner().getId() : null);
+            map.put("nextMatchId", match.getNextMatchId());
+            return map;
+        }).collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
+    }
+
+    // Aktualizacja wyniku meczu
+    @PutMapping("/matches/{matchId}/result")
+    public ResponseEntity<?> updateMatchResult(@PathVariable Long matchId,
+                                               @RequestBody Map<String, Object> body) {
+        try {
+            String result = (String) body.get("result");
+            Long winnerId = Long.valueOf(body.get("winnerId").toString());
+            bracketService.updateMatchResult(matchId, result, winnerId);
+            return ResponseEntity.ok(Map.of("message", "Wynik zapisany"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 }
