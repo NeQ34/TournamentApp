@@ -64,10 +64,13 @@ interface Team {
 
 interface Match {
   id: number;
+  matchNumber: number;
   roundNumber: number;
   matchOrder: number;
   teamA: { id: number; name: string } | null;
   teamB: { id: number; name: string } | null;
+  sourceMatchAId: number | null;
+    sourceMatchBId: number | null;
   result: string | null;
   status: string;
   winnerId: number | null;
@@ -123,6 +126,10 @@ const TournamentsManagement = () => {
   const filterTournaments = (list: Tournament[]) => {
     if (!searchTerm) return list;
     return list.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  };
+
+  const isValidScore = (value: string) => {
+    return /^\d+:\d+$/.test(value);
   };
 
   // ========== POBIERANIE DANYCH ==========
@@ -365,34 +372,61 @@ const TournamentsManagement = () => {
   };
 
   const handleSaveScore = async () => {
-    if (!selectedMatch || !winnerId) return;
-    try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/tournaments/matches/${selectedMatch.id}/result`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify({ result: score, winnerId }),
-        }
-      );
-      if (response.ok) {
-        await fetchBracket(selectedTournamentForDetails!.id);
-        setScoreDialogOpen(false);
-        setSelectedMatch(null);
-        setScore("");
-        setWinnerId(null);
-        setDialogSuccess("Wynik został zapisany.");
-      } else {
-        const error = await response.json();
-        setDialogError(error.message || "Błąd zapisu wyniku");
-      }
-    } catch (error) {
-      console.error("Błąd:", error);
+    if (!selectedMatch) return;
+    
+    if (!score.trim()) {
+        setDialogManageError("Wynik jest wymagany.");
+        return;
     }
-  };
+    if (!isValidScore(score)) {
+        setDialogManageError("Nieprawidłowy format wyniku. Użyj formatu: liczba:liczba (np. 3:1)");
+        return;
+    }
+    
+    const [scoreA, scoreB] = score.split(":").map(Number);
+    
+    let winnerId = null;
+    if (scoreA > scoreB) {
+        winnerId = selectedMatch.teamA?.id || null;
+    } else if (scoreB > scoreA) {
+        winnerId = selectedMatch.teamB?.id || null;
+    } else {
+        setDialogManageError("Remis nie jest dozwolony w turnieju pucharowym. Podaj zwycięzcę.");
+        return;
+    }
+    
+    if (!winnerId) {
+        setDialogManageError("Nie można określić zwycięzcy. Brak drużyn w meczu.");
+        return;
+    }
+    
+    try {
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/matches/${selectedMatch.id}/result`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+                body: JSON.stringify({ result: score, winnerId }),
+            }
+        );
+        if (response.ok) {
+            await fetchBracket(selectedTournamentForDetails!.id);
+            setScoreDialogOpen(false);
+            setSelectedMatch(null);
+            setScore("");
+            setDialogManageSuccess("Wynik został zapisany.");
+        } else {
+            const error = await response.json();
+            setDialogManageError(error.message || "Błąd zapisu wyniku");
+        }
+    } catch (error) {
+        console.error("Błąd:", error);
+        setDialogManageError("Nie udało się połączyć z serwerem.");
+    }
+};
 
   // ========== POMOCNICZE ==========
   const resetForm = () => {
@@ -433,6 +467,23 @@ const TournamentsManagement = () => {
     fetchAvailableTeams(tournament.discipline, tournament.id);
     fetchBracket(tournament.id);
   };
+
+  const getTeamDisplayName = (team: { id: number; name: string } | null, sourceMatchId: number | null, allMatches: Match[]) => {
+    if (team) {
+        // Jeśli drużyna jest już znana (z początkowego zgłoszenia)
+        return team.name;
+    }
+    if (sourceMatchId) {
+        // Znajdź mecz źródłowy
+        const sourceMatch = allMatches.find(m => m.id === sourceMatchId);
+        if (sourceMatch && sourceMatch.winnerId) {
+            const winnerTeam = sourceMatch.teamA?.id === sourceMatch.winnerId ? sourceMatch.teamA : sourceMatch.teamB;
+            return `${winnerTeam?.name} (mecz ${sourceMatch.matchNumber})`;
+        }
+        return `Zwycięzca meczu ${sourceMatchId}`;
+    }
+    return "BYE";
+};
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
@@ -821,39 +872,65 @@ const TournamentsManagement = () => {
               )}
 
               {bracket.length > 0 && (
-                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
-                  {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => (
+              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
+                    {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => (
                     <Box key={round} sx={{ width: "100%" }}>
-                      <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
-                        Runda {round}
-                      </Typography>
-                      <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
-                        {bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder).map(match => (
-                          <Paper key={match.id} sx={{ p: 2, minWidth: 200, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)" }}>
-                            <Typography>{match.teamA?.name || "BYE"}</Typography>
-                            <Typography variant="h6">vs</Typography>
-                            <Typography>{match.teamB?.name || "BYE"}</Typography>
-                            {match.result && <Typography sx={{ color: "#4caf50", mt: 1 }}>Wynik: {match.result}</Typography>}
-                            {match.status === "pending" && match.teamA && match.teamB && (
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => {
-                                  setSelectedMatch(match);
-                                  setScoreDialogOpen(true);
-                                }}
-                                sx={{ mt: 1, color: "#FF6A00" }}
-                              >
-                                Wprowadź wynik
-                              </Button>
-                            )}
-                            {match.winnerId && <Chip label="Rozegrany" size="small" sx={{ mt: 1 }} />}
-                          </Paper>
-                        ))}
-                      </Box>
+                        <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
+                            Runda {round}
+                        </Typography>
+                        <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
+                            {bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder).map(match => (
+                                <Paper key={match.id} sx={{ p: 2, minWidth: 220, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative" }}>
+                                    {/* Numer meczu na górze */}
+                                    <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
+                                        Mecz #{match.matchNumber}
+                                    </Typography>
+                                    
+                                    <Box sx={{ mt: 2 }}>
+                                        {/* Drużyna A z informacją skąd pochodzi */}
+                                        <Typography sx={{ fontWeight: 500 }}>
+                                            {getTeamDisplayName(match.teamA, match.sourceMatchAId, bracket)}
+                                        </Typography>
+                                        <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
+                                        {/* Drużyna B z informacją skąd pochodzi */}
+                                        <Typography sx={{ fontWeight: 500 }}>
+                                            {getTeamDisplayName(match.teamB, match.sourceMatchBId, bracket)}
+                                        </Typography>
+                                        
+                                        {match.result && (
+                                            <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
+                                                Wynik: {match.result}
+                                            </Typography>
+                                        )}
+                                        
+                                        {match.status === "pending" && match.teamA && match.teamB && (
+                                            <Button
+                                                size="small"
+                                                variant="outlined"
+                                                onClick={() => {
+                                                    setSelectedMatch(match);
+                                                    setScoreDialogOpen(true);
+                                                }}
+                                                sx={{ mt: 1, color: "#FF6A00" }}
+                                            >
+                                                Wprowadź wynik
+                                            </Button>
+                                        )}
+                                        
+                                        {match.winnerId && (
+                                            <Chip 
+                                                label="Rozegrany" 
+                                                size="small" 
+                                                sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} 
+                                            />
+                                        )}
+                                    </Box>
+                                </Paper>
+                            ))}
+                        </Box>
                     </Box>
-                  ))}
-                </Box>
+                ))}
+            </Box>
               )}
             </Box>
           )}
@@ -893,38 +970,38 @@ const TournamentsManagement = () => {
 
       {/* Dialog wprowadzania wyniku */}
       <Dialog open={scoreDialogOpen} onClose={() => setScoreDialogOpen(false)} maxWidth="sm" fullWidth
-        PaperProps={{ sx: { bgcolor: "rgba(0,0,0,0.9)", color: "#fff", borderRadius: 4 } }}>
-        <DialogTitle>Wprowadź wynik</DialogTitle>
-        <DialogContent>
+      PaperProps={{ sx: { bgcolor: "rgba(0,0,0,0.9)", color: "#fff", borderRadius: 4 } }}>
+      <DialogTitle>Wprowadź wynik</DialogTitle>
+      <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            {selectedMatch?.teamA?.name} vs {selectedMatch?.teamB?.name}
+              {selectedMatch?.teamA?.name} vs {selectedMatch?.teamB?.name}
           </Typography>
           <TextField
-            fullWidth
-            label="Wynik (np. 3:1)"
-            value={score}
-            onChange={(e) => setScore(e.target.value)}
-            sx={{ mb: 2 }}
-            InputLabelProps={{ style: { color: "#ccc" } }}
+              fullWidth
+              label="Wynik (np. 4:3)"
+              value={score}
+              onChange={(e) => {
+                  // Tylko cyfry, dwukropek i backspace
+                  const value = e.target.value;
+                  if (value === "" || /^[\d:]*$/.test(value)) {
+                      setScore(value);
+                  }
+              }}
+              placeholder="np. 4:3"
+              inputProps={{ inputMode: "numeric", pattern: "[0-9:]*" }}
+              sx={{ mb: 2 }}
+              InputLabelProps={{ style: { color: "#ccc" } }}
+              autoFocus
           />
-          <FormControl fullWidth>
-            <InputLabel sx={{ color: "#ccc" }}>Zwycięzca</InputLabel>
-            <Select
-              value={winnerId || ""}
-              onChange={(e) => setWinnerId(Number(e.target.value))}
-              label="Zwycięzca"
-              sx={{ color: "#fff" }}
-            >
-              <MenuItem value={selectedMatch?.teamA?.id}>{selectedMatch?.teamA?.name}</MenuItem>
-              <MenuItem value={selectedMatch?.teamB?.id}>{selectedMatch?.teamB?.name}</MenuItem>
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
+          <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.5)" }}>
+              Format: liczba:liczba (np. 3:1). Większa liczba wygrywa.
+          </Typography>
+      </DialogContent>
+      <DialogActions>
           <Button onClick={() => setScoreDialogOpen(false)} sx={{ color: "#ccc" }}>Anuluj</Button>
           <Button onClick={handleSaveScore} variant="contained" sx={{ bgcolor: "#FF6A00" }}>Zapisz</Button>
-        </DialogActions>
-      </Dialog>
+      </DialogActions>
+  </Dialog>
 
       {/* Dialog potwierdzenia usunięcia turnieju */}
       <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}

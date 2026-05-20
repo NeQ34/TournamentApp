@@ -59,8 +59,10 @@ public class BracketService {
         // I runda
         List<Match> roundMatches = new ArrayList<>();
         int matchOrder = 0;
+        int matchCounter = 1;
         for (int i = 0; i < allTeams.size(); i += 2) {
             Match match = new Match();
+            match.setMatchNumber(matchCounter++);
             match.setTournament(tournament);
             match.setTeamA(allTeams.get(i));
             match.setTeamB(allTeams.get(i + 1));

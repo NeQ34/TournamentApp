@@ -41,6 +41,17 @@ public class Match {
     private String result;
     private String status = "pending";  // pending, completed
 
+    @Column(name = "match_number")
+    private Integer matchNumber;
+
+    @Column(name = "source_match_a_id")
+    private Long sourceMatchAId;
+
+    @Column(name = "source_match_b_id")
+    private Long sourceMatchBId;
+
     @Column(name = "next_match_id")
     private Long nextMatchId;   // ID meczu, do którego przechodzi zwycięzca
+
+
 }

@@ -143,6 +143,9 @@ public class TournamentController {
             map.put("status", match.getStatus());
             map.put("winnerId", match.getWinner() != null ? match.getWinner().getId() : null);
             map.put("nextMatchId", match.getNextMatchId());
+            map.put("matchNumber", match.getMatchNumber());
+            map.put("sourceMatchAId", match.getSourceMatchAId());
+            map.put("sourceMatchBId", match.getSourceMatchBId());
             return map;
         }).collect(Collectors.toList());
 
