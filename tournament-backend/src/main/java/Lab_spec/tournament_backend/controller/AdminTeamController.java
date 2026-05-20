@@ -5,7 +5,9 @@ import Lab_spec.tournament_backend.dto.TeamRequest;
 import Lab_spec.tournament_backend.dto.TeamResponse;
 import Lab_spec.tournament_backend.dto.UserSearchResponse;
 import Lab_spec.tournament_backend.model.Team;
+import Lab_spec.tournament_backend.model.Tournament;
 import Lab_spec.tournament_backend.repository.TeamRepository;
+import Lab_spec.tournament_backend.repository.TournamentRepository;
 import Lab_spec.tournament_backend.service.AdminTeamService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -24,10 +27,12 @@ public class AdminTeamController {
 
     private final AdminTeamService adminTeamService;
     private final TeamRepository teamRepository;
+    private final TournamentRepository tournamentRepository;
 
-    public AdminTeamController(AdminTeamService adminTeamService, TeamRepository teamRepository) {
+    public AdminTeamController(AdminTeamService adminTeamService, TeamRepository teamRepository, TournamentRepository tournamentRepository) {
         this.adminTeamService = adminTeamService;
         this.teamRepository = teamRepository;
+        this.tournamentRepository = tournamentRepository;
     }
 
     @GetMapping("/teams")
@@ -107,11 +112,28 @@ public class AdminTeamController {
     }
 
     @GetMapping("/teams/available")
-    public ResponseEntity<?> getAvailableTeamsByDiscipline(@RequestParam String discipline) {
-        List<Team> teams = teamRepository.findByStatusAndSport("active", discipline);
+    public ResponseEntity<?> getAvailableTeamsByDiscipline(
+            @RequestParam String discipline,
+            @RequestParam(required = false) Long tournamentId) {
 
-        // Prosta konwersja ręczna – bez cykli
-        List<Map<String, Object>> response = teams.stream().map(team -> {
+        List<Team> allTeams = teamRepository.findByStatusAndSport("active", discipline);
+
+        // Jeśli podano tournamentId, odfiltruj drużyny już zgłoszone
+        if (tournamentId != null) {
+            Tournament tournament = tournamentRepository.findById(tournamentId)
+                    .orElseThrow(() -> new RuntimeException("Turniej nie znaleziony"));
+
+            Set<Long> registeredTeamIds = tournament.getTeams().stream()
+                    .map(Team::getId)
+                    .collect(Collectors.toSet());
+
+            allTeams = allTeams.stream()
+                    .filter(team -> !registeredTeamIds.contains(team.getId()))
+                    .collect(Collectors.toList());
+        }
+
+        // Ręczna konwersja
+        List<Map<String, Object>> response = allTeams.stream().map(team -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", team.getId());
             map.put("name", team.getName());

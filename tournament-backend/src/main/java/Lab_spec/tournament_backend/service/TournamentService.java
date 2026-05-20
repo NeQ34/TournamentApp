@@ -10,6 +10,7 @@ import Lab_spec.tournament_backend.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -150,11 +151,17 @@ public class TournamentService {
         Tournament tournament = tournamentRepository.findById(tournamentId)
                 .orElseThrow(() -> new RuntimeException("Turniej nie znaleziony"));
 
+        // Pobierz ID drużyn już zgłoszonych
+        Set<Long> registeredTeamIds = tournament.getTeams().stream()
+                .map(Team::getId)
+                .collect(Collectors.toSet());
+
+        // Pobierz wszystkie aktywne drużyny w danej dyscyplinie
         List<Team> allActiveTeams = teamRepository.findByStatusAndSport("active", discipline);
 
-        // Filtruj drużyny, które nie są jeszcze zgłoszone
+        // Odfiltruj te, które są już zgłoszone
         return allActiveTeams.stream()
-                .filter(team -> !tournament.getTeams().contains(team))
+                .filter(team -> !registeredTeamIds.contains(team.getId()))
                 .collect(Collectors.toList());
     }
 

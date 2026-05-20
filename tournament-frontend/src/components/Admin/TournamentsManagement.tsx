@@ -152,24 +152,27 @@ const TournamentsManagement = () => {
     }
   };
 
-  const fetchAvailableTeams = async (discipline: string) => {
+  const fetchAvailableTeams = async (discipline: string, tournamentId?: number) => {
     if (!discipline) return;
     setTeamsLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/teams/available?discipline=${encodeURIComponent(discipline)}`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableTeams(data);
-      }
+        let url = `http://localhost:8080/api/admin/teams/available?discipline=${encodeURIComponent(discipline)}`;
+        if (tournamentId) {
+            url += `&tournamentId=${tournamentId}`;
+        }
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        if (response.ok) {
+            const data = await response.json();
+            setAvailableTeams(data);
+        }
     } catch (error) {
-      console.error("Błąd pobierania drużyn:", error);
+        console.error("Błąd pobierania drużyn:", error);
     } finally {
-      setTeamsLoading(false);
+        setTeamsLoading(false);
     }
-  };
+};
 
   const fetchRegisteredTeams = async (tournamentId: number) => {
     setTeamsLoading(true);
@@ -292,46 +295,49 @@ const TournamentsManagement = () => {
   const handleAddTeamToTournament = async (teamId: number) => {
     if (!selectedTournamentForDetails) return;
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
-        { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
-      if (response.ok) {
-        fetchRegisteredTeams(selectedTournamentForDetails.id);
-        fetchAvailableTeams(selectedTournamentForDetails.discipline);
-        fetchTournaments();
-        setDialogSuccess("Drużyna została dodana do turnieju.");
-      } else {
-        const error = await response.json();
-        setDialogError(error.message || "Nie udało się dodać drużyny.");
-      }
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
+            { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+        if (response.ok) {
+            // Odśwież obie listy
+            await fetchRegisteredTeams(selectedTournamentForDetails.id);
+            await fetchAvailableTeams(selectedTournamentForDetails.discipline, selectedTournamentForDetails.id);
+            // Odśwież też listę turniejów (żeby zaktualizować licznik drużyn)
+            fetchTournaments();
+            setDialogSuccess("Drużyna została dodana do turnieju.");
+        } else {
+            const error = await response.json();
+            setDialogError(error.message || "Nie udało się dodać drużyny.");
+        }
     } catch (error) {
-      console.error("Błąd dodawania drużyny:", error);
-      setDialogError("Nie udało się połączyć z serwerem.");
+        console.error("Błąd dodawania drużyny:", error);
+        setDialogError("Nie udało się połączyć z serwerem.");
     }
   };
 
   const handleRemoveTeamFromTournament = async (teamId: number) => {
     if (!selectedTournamentForDetails) return;
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
-      if (response.ok) {
-        fetchRegisteredTeams(selectedTournamentForDetails.id);
-        fetchAvailableTeams(selectedTournamentForDetails.discipline);
-        fetchTournaments();
-        setDialogSuccess("Drużyna została usunięta z turnieju.");
-      } else {
-        const error = await response.json();
-        setDialogError(error.message || "Nie udało się usunąć drużyny.");
-      }
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/teams/${teamId}`,
+            { method: "DELETE", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+        if (response.ok) {
+            // Odśwież obie listy
+            await fetchRegisteredTeams(selectedTournamentForDetails.id);
+            await fetchAvailableTeams(selectedTournamentForDetails.discipline, selectedTournamentForDetails.id);
+            fetchTournaments();
+            setDialogSuccess("Drużyna została usunięta z turnieju.");
+        } else {
+            const error = await response.json();
+            setDialogError(error.message || "Nie udało się usunąć drużyny.");
+        }
     } catch (error) {
-      console.error("Błąd usuwania drużyny:", error);
-      setDialogError("Nie udało się połączyć z serwerem.");
+        console.error("Błąd usuwania drużyny:", error);
+        setDialogError("Nie udało się połączyć z serwerem.");
     }
-  };
+};
 
   // ========== DRABINKA ==========
   const handleGenerateBracket = async () => {
@@ -422,7 +428,7 @@ const TournamentsManagement = () => {
     setSelectedTournamentForDetails(tournament);
     setTabValue(0);
     fetchRegisteredTeams(tournament.id);
-    fetchAvailableTeams(tournament.discipline);
+    fetchAvailableTeams(tournament.discipline, tournament.id);
     fetchBracket(tournament.id);
   };
 
@@ -463,6 +469,12 @@ const TournamentsManagement = () => {
     }, 3000);
     return () => clearTimeout(timer);
   }, [dialogError, dialogSuccess]);
+  useEffect(() => {
+    if (selectedTournamentForDetails && tabValue === 0) {
+        fetchRegisteredTeams(selectedTournamentForDetails.id);
+        fetchAvailableTeams(selectedTournamentForDetails.discipline, selectedTournamentForDetails.id);
+    }
+  }, [tabValue, selectedTournamentForDetails]);
 
   const filteredTournaments = filterTournaments(tournaments).sort((a, b) =>
     a.name.localeCompare(b.name, "pl", { sensitivity: "base" })
