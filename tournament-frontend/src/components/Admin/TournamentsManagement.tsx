@@ -116,6 +116,8 @@ const TournamentsManagement = () => {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [score, setScore] = useState("");
   const [winnerId, setWinnerId] = useState<number | null>(null);
+  const [dialogManageError, setDialogManageError] = useState("");
+  const [dialogManageSuccess, setDialogManageSuccess] = useState("");
 
   // Filtrowanie
   const filterTournaments = (list: Tournament[]) => {
@@ -305,7 +307,7 @@ const TournamentsManagement = () => {
             await fetchAvailableTeams(selectedTournamentForDetails.discipline, selectedTournamentForDetails.id);
             // Odśwież też listę turniejów (żeby zaktualizować licznik drużyn)
             fetchTournaments();
-            setDialogSuccess("Drużyna została dodana do turnieju.");
+            setDialogManageSuccess("Drużyna została dodana do turnieju.");
         } else {
             const error = await response.json();
             setDialogError(error.message || "Nie udało się dodać drużyny.");
@@ -328,7 +330,7 @@ const TournamentsManagement = () => {
             await fetchRegisteredTeams(selectedTournamentForDetails.id);
             await fetchAvailableTeams(selectedTournamentForDetails.discipline, selectedTournamentForDetails.id);
             fetchTournaments();
-            setDialogSuccess("Drużyna została usunięta z turnieju.");
+            setDialogManageSuccess("Drużyna została usunięta z turnieju.");
         } else {
             const error = await response.json();
             setDialogError(error.message || "Nie udało się usunąć drużyny.");
@@ -460,6 +462,15 @@ const TournamentsManagement = () => {
     fetchTournaments();
     fetchDisciplines();
   }, []);
+
+  useEffect(() => {
+    if (!dialogManageError && !dialogManageSuccess) return;
+    const timer = setTimeout(() => {
+        setDialogManageError("");
+        setDialogManageSuccess("");
+    }, 3000);
+    return () => clearTimeout(timer);
+}, [dialogManageError, dialogManageSuccess]);
 
   useEffect(() => {
     if (!dialogError && !dialogSuccess) return;
@@ -709,6 +720,18 @@ const TournamentsManagement = () => {
           </IconButton>
         </DialogTitle>
         <DialogContent>
+
+          {dialogManageError && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+                {dialogManageError}
+            </Alert>
+          )}
+          {dialogManageSuccess && (
+              <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+                  {dialogManageSuccess}
+              </Alert>
+          )}
+
           <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} sx={{ borderBottom: "1px solid rgba(255,255,255,0.1)", mb: 2 }}>
             <Tab label="Drużyny" sx={{ color: "#fff" }} />
             <Tab label="Drabinka" sx={{ color: "#fff" }} />
@@ -782,6 +805,7 @@ const TournamentsManagement = () => {
                 <Button
                   variant="outlined"
                   onClick={() => setRandomize(!randomize)}
+                  disabled={bracket.length > 0}
                   sx={{ color: randomize ? "#FF6A00" : "#fff", borderColor: "#FF6A00" }}
                 >
                   Losuj pary: {randomize ? "TAK" : "NIE"}
