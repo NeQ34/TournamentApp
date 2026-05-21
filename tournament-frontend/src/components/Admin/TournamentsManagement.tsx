@@ -210,6 +210,19 @@ const TournamentsManagement = () => {
       );
       if (response.ok) {
         const data = await response.json();
+
+        // Przenumeruj mecze – najpierw posortuj po rundzie i kolejności
+        const sortedMatches = [...data].sort((a, b) => {
+            if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber;
+            return a.matchOrder - b.matchOrder;
+        });
+        
+        // Dodaj numer porządkowy (od 1)
+        const matchesWithNumbers = sortedMatches.map((match, index) => ({
+            ...match,
+            matchNumber: index + 1  // ← DODAJEMY NUMER PORZĄDKOWY
+        }));
+
         setBracket(data);
       }
     } catch (error) {
@@ -317,7 +330,8 @@ const TournamentsManagement = () => {
             setDialogManageSuccess("Drużyna została dodana do turnieju.");
         } else {
             const error = await response.json();
-            setDialogError(error.message || "Nie udało się dodać drużyny.");
+            setDialogManageSuccess(error.message || "Nie udało się dodać drużyny.");
+            //setDialogError(error.message || "Nie udało się dodać drużyny.");
         }
     } catch (error) {
         console.error("Błąd dodawania drużyny:", error);
@@ -468,22 +482,139 @@ const TournamentsManagement = () => {
     fetchBracket(tournament.id);
   };
 
-  const getTeamDisplayName = (team: { id: number; name: string } | null, sourceMatchId: number | null, allMatches: Match[]) => {
+  const getTeamDisplayName = (match: Match, teamSide: 'A' | 'B', allMatches: Match[]): string => {
+    // Sprawdź czy drużyna jest już przypisana
+    const team = teamSide === 'A' ? match.teamA : match.teamB;
+    
+    // Jeśli drużyna istnieje, sprawdź skąd przyszła
     if (team) {
-        // Jeśli drużyna jest już znana (z początkowego zgłoszenia)
+        // Szukamy meczu, którego zwycięzca to ta drużyna i który wskazuje na ten mecz
+        const sourceMatch = allMatches.find(m => 
+            m.winnerId === team.id && m.nextMatchId === match.id
+        );
+        if (sourceMatch) {
+            return `${team.name} (z meczu ${sourceMatch.matchNumber})`;
+        }
         return team.name;
     }
-    if (sourceMatchId) {
-        // Znajdź mecz źródłowy
-        const sourceMatch = allMatches.find(m => m.id === sourceMatchId);
-        if (sourceMatch && sourceMatch.winnerId) {
-            const winnerTeam = sourceMatch.teamA?.id === sourceMatch.winnerId ? sourceMatch.teamA : sourceMatch.teamB;
-            return `${winnerTeam?.name} (mecz ${sourceMatch.matchNumber})`;
+    
+    // Jeśli drużyny nie ma, szukamy zwycięzcy z poprzednich meczów
+    // Znajdź wszystkie mecze które wskazują na ten mecz (nextMatchId = obecny mecz)
+    let previousMatches = allMatches.filter(m => m.nextMatchId === match.id);
+    
+    // Jeśli nie znaleziono po nextMatchId, spróbuj po kolejności w rundzie
+    if (previousMatches.length === 0 && match.roundNumber > 1) {
+        // Dla finału: szukamy zwycięzców półfinałów
+        const previousRound = match.roundNumber - 1;
+        const matchesInPreviousRound = allMatches.filter(m => m.roundNumber === previousRound);
+        
+        // Dla meczu w rundzie 2 (półfinał) – powinien mieć 2 poprzednie mecze
+        // Dla meczu w rundzie 3 (finał) – powinien mieć 2 poprzednie mecze (półfinały)
+        if (matchesInPreviousRound.length === 2) {
+            if (teamSide === 'A') {
+                previousMatches = [matchesInPreviousRound[0]];
+            } else {
+                previousMatches = [matchesInPreviousRound[1]];
+            }
+        } else if (matchesInPreviousRound.length === 4 && match.roundNumber === 2) {
+            // Ćwierćfinały → półfinały
+            const index = teamSide === 'A' ? 0 : 1;
+            previousMatches = [matchesInPreviousRound[index]];
+        } else {
+            previousMatches = matchesInPreviousRound;
         }
-        return `Zwycięzca meczu ${sourceMatchId}`;
+    }
+    
+    // Jeśli mamy poprzednie mecze
+    if (previousMatches.length > 0) {
+        // Dla miejsca A weź pierwszy mecz, dla miejsca B weź drugi (jeśli istnieje)
+        const sourceMatch = teamSide === 'A' ? previousMatches[0] : (previousMatches[1] || previousMatches[0]);
+        
+        if (sourceMatch && sourceMatch.winnerId) {
+            // Znajdź zwycięską drużynę
+            let winnerName = "";
+            if (sourceMatch.teamA?.id === sourceMatch.winnerId) {
+                winnerName = sourceMatch.teamA.name;
+            } else if (sourceMatch.teamB?.id === sourceMatch.winnerId) {
+                winnerName = sourceMatch.teamB.name;
+            }
+            
+            if (winnerName) {
+                return `${winnerName} (z meczu ${sourceMatch.matchNumber})`;
+            }
+            return `Zwycięzca meczu ${sourceMatch.matchNumber}`;
+        } else if (sourceMatch) {
+            return `Zwycięzca meczu ${sourceMatch.matchNumber}`;
+        }
     }
     return "BYE";
 };
+
+  // Pobiera zwycięzcę meczu (nazwę drużyny i numer meczu źródłowego)
+const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: string; sourceMatchId: number } | null => {
+    const match = allMatches.find(m => m.id === matchId);
+    if (!match || !match.winnerId) return null;
+    
+    // Znajdź zwycięską drużynę
+    let winnerName = "";
+    if (match.teamA?.id === match.winnerId) {
+        winnerName = match.teamA.name;
+    } else if (match.teamB?.id === match.winnerId) {
+        winnerName = match.teamB.name;
+    } else {
+        return null;
+    }
+    
+    return { name: winnerName, sourceMatchId: match.matchNumber};
+  };
+
+  const getMatchesMap = (matches: Match[]) => {
+    const map = new Map<number, Match>();
+    matches.forEach(m => map.set(m.id, m));
+    return map;
+  };
+
+  const getTeamSource = (match: Match, teamSide: 'A' | 'B', allMatches: Match[], matchesMap: Map<number, Match>): string => {
+    // Jeśli drużyna istnieje (to drużyna początkowa, nie z awansu)
+    if (teamSide === 'A' && match.teamA) {
+        return match.teamA.name;
+    }
+    if (teamSide === 'B' && match.teamB) {
+        return match.teamB.name;
+    }
+    
+    const previousRoundMatches = allMatches.filter(m => 
+        m.roundNumber === match.roundNumber - 1 && 
+        m.nextMatchId === match.id
+    );
+    
+    if (previousRoundMatches.length === 1) {
+        const sourceMatch = previousRoundMatches[0];
+        if (sourceMatch.winnerId && sourceMatch.teamA && sourceMatch.teamB) {
+            const winnerName = sourceMatch.teamA.id === sourceMatch.winnerId 
+                ? sourceMatch.teamA.name 
+                : sourceMatch.teamB.name;
+            return `${winnerName} (mecz ${sourceMatch.matchNumber})`;
+        }
+        return `Zwycięzca meczu ${sourceMatch.matchNumber}`;
+    }
+    
+    if (previousRoundMatches.length === 2) {
+        const index = teamSide === 'A' ? 0 : 1;
+        const sourceMatch = previousRoundMatches[index];
+        if (sourceMatch && sourceMatch.winnerId && sourceMatch.teamA && sourceMatch.teamB) {
+            const winnerName = sourceMatch.teamA.id === sourceMatch.winnerId 
+                ? sourceMatch.teamA.name 
+                : sourceMatch.teamB.name;
+            return `${winnerName} (mecz ${sourceMatch.matchNumber})`;
+        }
+        return sourceMatch ? `Zwycięzca meczu ${sourceMatch.matchNumber}` : 'BYE';
+    }
+    
+    return 'BYE';
+  };
+
+
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
@@ -873,65 +1004,73 @@ const TournamentsManagement = () => {
 
               {bracket.length > 0 && (
               <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
-                    {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => (
-                    <Box key={round} sx={{ width: "100%" }}>
-                        <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
-                            Runda {round}
-                        </Typography>
-                        <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
-                            {bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder).map(match => (
-                                <Paper key={match.id} sx={{ p: 2, minWidth: 220, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative" }}>
-                                    {/* Numer meczu na górze */}
-                                    <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
-                                        Mecz #{match.matchNumber}
-                                    </Typography>
-                                    
-                                    <Box sx={{ mt: 2 }}>
-                                        {/* Drużyna A z informacją skąd pochodzi */}
-                                        <Typography sx={{ fontWeight: 500 }}>
-                                            {getTeamDisplayName(match.teamA, match.sourceMatchAId, bracket)}
-                                        </Typography>
-                                        <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
-                                        {/* Drużyna B z informacją skąd pochodzi */}
-                                        <Typography sx={{ fontWeight: 500 }}>
-                                            {getTeamDisplayName(match.teamB, match.sourceMatchBId, bracket)}
-                                        </Typography>
-                                        
-                                        {match.result && (
-                                            <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
-                                                Wynik: {match.result}
-                                            </Typography>
-                                        )}
-                                        
-                                        {match.status === "pending" && match.teamA && match.teamB && (
-                                            <Button
-                                                size="small"
-                                                variant="outlined"
-                                                onClick={() => {
-                                                    setSelectedMatch(match);
-                                                    setScoreDialogOpen(true);
-                                                }}
-                                                sx={{ mt: 1, color: "#FF6A00" }}
-                                            >
-                                                Wprowadź wynik
-                                            </Button>
-                                        )}
-                                        
-                                        {match.winnerId && (
-                                            <Chip 
-                                                label="Rozegrany" 
-                                                size="small" 
-                                                sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} 
-                                            />
-                                        )}
-                                    </Box>
-                                </Paper>
-                            ))}
-                        </Box>
-                    </Box>
-                ))}
-            </Box>
-              )}
+                  {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => {
+                      const roundMatches = bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder);
+                      // Oblicz offset numerów dla każdej rundy
+                      let startNumber = 1;
+                      for (let r = 1; r < round; r++) {
+                          const prevRoundMatches = bracket.filter(m => m.roundNumber === r);
+                          startNumber += prevRoundMatches.length;
+                      }
+                      
+                      return (
+                          <Box key={round} sx={{ width: "100%" }}>
+                              <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
+                                  Runda {round}
+                              </Typography>
+                              <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
+                                  {roundMatches.map((match, idx) => (
+                                      <Paper key={match.id} sx={{ p: 2, minWidth: 250, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative" }}>
+                                          {/* Numer meczu */}
+                                          <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
+                                              Mecz #{startNumber + idx}
+                                          </Typography>
+                                          
+                                          <Box sx={{ mt: 2 }}>
+                                              {/* Drużyna A */}
+                                              <Typography sx={{ fontWeight: 500 }}>
+                                                  {getTeamDisplayName(match, 'A', bracket)}
+                                              </Typography>
+                                              
+                                              <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
+                                              
+                                              {/* Drużyna B */}
+                                              <Typography sx={{ fontWeight: 500 }}>
+                                                  {getTeamDisplayName(match, 'B', bracket)}
+                                              </Typography>
+                                              
+                                              {match.result && (
+                                                  <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
+                                                      Wynik: {match.result}
+                                                  </Typography>
+                                              )}
+                                              
+                                              {match.status === "pending" && match.teamA && match.teamB && (
+                                                  <Button
+                                                      size="small"
+                                                      variant="outlined"
+                                                      onClick={() => {
+                                                          setSelectedMatch(match);
+                                                          setScoreDialogOpen(true);
+                                                      }}
+                                                      sx={{ mt: 1, color: "#FF6A00" }}
+                                                  >
+                                                      Wprowadź wynik
+                                                  </Button>
+                                              )}
+                                              
+                                              {match.winnerId && (
+                                                  <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
+                                              )}
+                                          </Box>
+                                      </Paper>
+                                  ))}
+                              </Box>
+                          </Box>
+                      );
+                  })}
+              </Box>
+          )}
             </Box>
           )}
 
