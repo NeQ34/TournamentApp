@@ -277,6 +277,17 @@ const fetchMemberSuggestions = async (email: string) => {
     }
   }, [open, team]);
 
+  useEffect(() => {
+    if (!memberSuccess && !memberError) return;
+
+    const timer = setTimeout(() => {
+      setMemberSuccess("");
+      setMemberError("");
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [memberSuccess, memberError]);
+
   return (
       <>
         <Dialog
@@ -302,6 +313,18 @@ const fetchMemberSuggestions = async (email: string) => {
             </Box>
           </DialogTitle>
           <DialogContent>
+            {memberSuccess && (
+              <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+                {memberSuccess}
+              </Alert>
+            )}
+
+            {memberError && !openAddMember && (
+              <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+                {memberError}
+              </Alert>
+            )}
+
             {loading ? (
                 <Typography sx={{ textAlign: "center", py: 4 }}>Ładowanie...</Typography>
             ) : members.length === 0 ? (
@@ -385,11 +408,6 @@ const fetchMemberSuggestions = async (email: string) => {
             </Alert>
           )}
 
-          {memberSuccess && (
-            <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
-              {memberSuccess}
-            </Alert>
-          )}
             <Autocomplete
               options={memberOptions}
               loading={memberOptionsLoading}
@@ -536,7 +554,11 @@ const fetchMemberSuggestions = async (email: string) => {
 };
 
 // ========== GŁÓWNY KOMPONENT ZARZĄDZANIA DRUŻYNAMI ==========
-const TeamsManagement = () => {
+interface TeamsManagementProps {
+  onConfigureDiscipline: (disciplineName: string) => void;
+}
+
+const TeamsManagement = ({ onConfigureDiscipline }: TeamsManagementProps) => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [pendingTeams, setPendingTeams] = useState<PendingTeam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -562,6 +584,8 @@ const [usersLoading, setUsersLoading] = useState(false);
 const [disciplines, setDisciplines] = useState<string[]>([]);
 const [similarDisciplines, setSimilarDisciplines] = useState<string[]>([]);
 const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
+const [newDisciplineDialogOpen, setNewDisciplineDialogOpen] = useState(false);
+const [newDisciplineName, setNewDisciplineName] = useState("");
 
 
   // Funkcja filtrowania drużyn
@@ -695,6 +719,10 @@ const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
     setDialogError("");
     setDialogSuccess("");
 
+    const disciplineAlreadyExists = disciplines.some(
+      (d) => d.toLowerCase() === formData.sport.toLowerCase()
+    );
+
     const similar = await getSimilarDisciplines(formData.sport);
 
     if (similar.length > 0 && !ignoreSimilarDisciplines) {
@@ -713,11 +741,20 @@ const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
       });
 
       if (response.ok) {
-        fetchTeams();
-        fetchPendingTeams();
-        fetchDisciplines();
-        setOpenDialog(false);
-        resetForm();
+
+          const createdDisciplineName = formData.sport;
+
+          fetchTeams();
+          fetchPendingTeams();
+          fetchDisciplines();
+
+          setOpenDialog(false);
+          resetForm();
+
+          if (!disciplineAlreadyExists) {
+              setNewDisciplineName(createdDisciplineName);
+              setNewDisciplineDialogOpen(true);
+          }
       } else {
         const errorData = await response.json();
         setDialogError(errorData.message || "Nie udało się dodać drużyny.");
@@ -1444,6 +1481,51 @@ useEffect(() => {
           </DialogActions>
         </Dialog>
 
+        <Dialog
+            open={newDisciplineDialogOpen}
+            onClose={() => setNewDisciplineDialogOpen(false)}
+            PaperProps={{
+                sx: {
+                    bgcolor: "rgba(0,0,0,0.9)",
+                    color: "#fff",
+                    borderRadius: 4,
+                },
+            }}
+        >
+            <DialogTitle>Nowa dyscyplina została utworzona</DialogTitle>
+
+            <DialogContent>
+                <Typography>
+                    Dodano nową dyscyplinę:
+                    <strong> {newDisciplineName}</strong>.
+                </Typography>
+
+                <Typography sx={{ mt: 2, color: "rgba(255,255,255,0.7)" }}>
+                    Aby drużyny mogły być poprawnie walidowane,
+                    ustaw minimalną i maksymalną liczbę zawodników.
+                </Typography>
+            </DialogContent>
+
+            <DialogActions>
+                <Button
+                    onClick={() => setNewDisciplineDialogOpen(false)}
+                    sx={{ color: "#ccc" }}
+                >
+                    Edytuj później
+                </Button>
+
+                <Button
+                    variant="contained"
+                    sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
+                    onClick={() => {
+                        setNewDisciplineDialogOpen(false);
+                        onConfigureDiscipline(newDisciplineName);
+                    }}
+                >
+                    Edytuj teraz
+                </Button>
+            </DialogActions>
+        </Dialog>
 
         </Box>
   );

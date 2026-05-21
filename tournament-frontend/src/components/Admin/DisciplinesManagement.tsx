@@ -31,7 +31,15 @@ interface Discipline {
   maxMembers: number;
 }
 
-const DisciplinesManagement = () => {
+interface DisciplinesManagementProps {
+  disciplineToEditName?: string | null;
+  onDisciplineEditHandled?: () => void;
+}
+
+const DisciplinesManagement = ({
+  disciplineToEditName,
+  onDisciplineEditHandled,
+}: DisciplinesManagementProps) => {
   const [disciplines, setDisciplines] = useState<Discipline[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline | null>(null);
@@ -40,6 +48,8 @@ const DisciplinesManagement = () => {
   const [maxMembers, setMaxMembers] = useState("");
   const [messageError, setMessageError] = useState("");
   const [messageSuccess, setMessageSuccess] = useState("");
+  const [similarDisciplines, setSimilarDisciplines] = useState<string[]>([]);
+  const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
 
   const fetchDisciplines = async () => {
     try {
@@ -49,7 +59,8 @@ const DisciplinesManagement = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setDisciplines(data);
+        console.log("POBRANE DYSCYPLINY:", data);
+        setDisciplines([...data]);
       }
     } catch (error) {
       console.error("Błąd pobierania dyscyplin:", error);
@@ -57,9 +68,43 @@ const DisciplinesManagement = () => {
     }
   };
 
+    const getSimilarDisciplines = async (value: string): Promise<string[]> => {
+      if (!value.trim()) {
+        return [];
+      }
+
+      try {
+        const response = await fetch(
+          `http://localhost:8080/api/disciplines/similar?name=${encodeURIComponent(value)}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          return data.map((discipline: { id: number; name: string }) => discipline.name);
+        }
+      } catch (error) {
+        console.error("Błąd sprawdzania podobnych dyscyplin:", error);
+      }
+
+      return [];
+    };
+
   useEffect(() => {
     fetchDisciplines();
   }, []);
+
+  useEffect(() => {
+    if (!disciplineToEditName || disciplines.length === 0) return;
+
+    const discipline = disciplines.find(
+      (d) => d.name.toLowerCase() === disciplineToEditName.toLowerCase()
+    );
+
+    if (discipline) {
+      openEditDialog(discipline);
+      onDisciplineEditHandled?.();
+    }
+  }, [disciplineToEditName, disciplines]);
 
     useEffect(() => {
       if (!messageError && !messageSuccess) return;
@@ -79,6 +124,8 @@ const DisciplinesManagement = () => {
     setMessageError("");
     setMinMembers("");
     setMaxMembers("");
+    setSimilarDisciplines([]);
+    setIgnoreSimilarDisciplines(false);
   };
 
   const openAddDialog = () => {
@@ -88,6 +135,8 @@ const DisciplinesManagement = () => {
     setOpenDialog(true);
     setMinMembers("");
     setMaxMembers("");
+    setSimilarDisciplines([]);
+    setIgnoreSimilarDisciplines(false);
   };
 
   const openEditDialog = (discipline: Discipline) => {
@@ -95,8 +144,10 @@ const DisciplinesManagement = () => {
     setName(discipline.name);
     setMessageError("");
     setOpenDialog(true);
-    setMinMembers(String(discipline.minMembers));
-    setMaxMembers(String(discipline.maxMembers));
+    setMinMembers(discipline.minMembers != null ? String(discipline.minMembers) : "");
+    setMaxMembers(discipline.maxMembers != null ? String(discipline.maxMembers) : "");
+    setSimilarDisciplines([]);
+    setIgnoreSimilarDisciplines(false);
   };
 
   const handleSave = async () => {
@@ -107,6 +158,40 @@ const DisciplinesManagement = () => {
 
     if (!trimmedName) {
       setMessageError("Nazwa dyscypliny jest wymagana.");
+      return;
+    }
+
+    if (!minMembers.trim() || !maxMembers.trim()) {
+      setMessageError("Minimalna i maksymalna liczba członków jest wymagana.");
+      return;
+    }
+
+    const min = Number(minMembers);
+    const max = Number(maxMembers);
+
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      setMessageError("Minimalna i maksymalna liczba członków musi być liczbą.");
+      return;
+    }
+
+    if (min < 1) {
+      setMessageError("Minimalna liczba członków musi być większa od 0.");
+      return;
+    }
+
+    if (max < min) {
+      setMessageError("Maksymalna liczba członków nie może być mniejsza niż minimalna.");
+      return;
+    }
+
+    const similar = await getSimilarDisciplines(trimmedName);
+
+    const isSameEditedDiscipline =
+      selectedDiscipline &&
+      selectedDiscipline.name.toLowerCase() === trimmedName.toLowerCase();
+
+    if (similar.length > 0 && !ignoreSimilarDisciplines && !isSameEditedDiscipline) {
+      setSimilarDisciplines(similar);
       return;
     }
 
@@ -124,24 +209,15 @@ const DisciplinesManagement = () => {
         },
         body: JSON.stringify({
           name: trimmedName,
-          minMembers: Number(minMembers),
-          maxMembers: Number(maxMembers),
+          minMembers: min,
+          maxMembers: max,
         }),
       });
 
       if (response.ok) {
-        const savedDiscipline = await response.json();
         const wasEdit = selectedDiscipline !== null;
 
-        setDisciplines((prev) => {
-          if (wasEdit) {
-            return prev.map((discipline) =>
-              discipline.id === savedDiscipline.id ? savedDiscipline : discipline
-            );
-          }
-
-          return [...prev, savedDiscipline];
-        });
+        await fetchDisciplines();
 
         setOpenDialog(false);
         setSelectedDiscipline(null);
@@ -203,7 +279,7 @@ const DisciplinesManagement = () => {
         </Button>
       </Box>
 
-      {messageError && (
+      {messageError && !openDialog && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
           {messageError}
         </Alert>
@@ -242,7 +318,7 @@ const DisciplinesManagement = () => {
                 a.name.localeCompare(b.name, "pl", { sensitivity: "base" })
               )
               .map((discipline, index) => (
-              <TableRow key={discipline.id}>
+              <TableRow key={`${discipline.id}-${discipline.name}-${discipline.minMembers}-${discipline.maxMembers}`}>
                 <TableCell sx={{ color: "#fff" }}>{index + 1}</TableCell>
                 <TableCell sx={{ color: "#fff" }}>{discipline.name}</TableCell>
                 <TableCell sx={{ color: "#fff" }}>{discipline.minMembers}</TableCell>
@@ -296,10 +372,51 @@ const DisciplinesManagement = () => {
             label="Nazwa dyscypliny"
             fullWidth
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              setIgnoreSimilarDisciplines(false);
+              setSimilarDisciplines([]);
+            }}
             InputLabelProps={{ style: { color: "#ccc" } }}
             sx={{ input: { color: "#fff" }, mt: 1 }}
           />
+
+          {similarDisciplines.length > 0 && (
+            <Alert
+              severity="warning"
+              sx={{ borderRadius: 2, mt: 2 }}
+              action={
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => {
+                      const selected = similarDisciplines[0];
+                      setName(selected);
+                      setSimilarDisciplines([]);
+                      setIgnoreSimilarDisciplines(false);
+                    }}
+                  >
+                    Użyj istniejącej
+                  </Button>
+
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => {
+                      setIgnoreSimilarDisciplines(true);
+                      setSimilarDisciplines([]);
+                      setMessageError("");
+                    }}
+                  >
+                    Dodaj mimo to
+                  </Button>
+                </Box>
+              }
+            >
+              Podobna dyscyplina już istnieje: {similarDisciplines.join(", ")}
+            </Alert>
+          )}
 
           <TextField
             label="Minimalna liczba członków"

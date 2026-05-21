@@ -34,7 +34,7 @@ public class DisciplineService {
 
         validateMemberLimits(minMembers, maxMembers);
 
-        String normalizedName = name.trim();
+        String normalizedName = formatDisciplineName(name);
 
         if (disciplineRepository.existsByNameIgnoreCase(normalizedName)) {
             throw new RuntimeException("Taka dyscyplina już istnieje.");
@@ -65,7 +65,7 @@ public class DisciplineService {
             );
         }
 
-        String normalizedName = newName.trim();
+        String normalizedName = formatDisciplineName(newName);
 
         disciplineRepository.findByNameIgnoreCase(normalizedName)
                 .ifPresent(existing -> {
@@ -93,11 +93,7 @@ public class DisciplineService {
     }
 
     public String getOrCreateDisciplineName(String name) {
-        String trimmedName = name.trim().toLowerCase();
-
-        String normalizedName =
-                trimmedName.substring(0, 1).toUpperCase()
-                        + trimmedName.substring(1);
+        String normalizedName = formatDisciplineName(name);
 
         return disciplineRepository.findByNameIgnoreCase(normalizedName)
                 .map(Discipline::getName)
@@ -116,17 +112,9 @@ public class DisciplineService {
             return List.of();
         }
 
-        String checkedName = name.trim().toLowerCase();
-        LevenshteinDistance distance = new LevenshteinDistance();
-
         return disciplineRepository.findAll().stream()
-                .filter(discipline -> {
-                    String existingName = discipline.getName().toLowerCase();
-
-                    int result = distance.apply(checkedName, existingName);
-
-                    return result <= 2 && !existingName.equals(checkedName);
-                })
+                .filter(discipline -> areDisciplinesSimilar(name, discipline.getName()))
+                .filter(discipline -> !normalizeText(discipline.getName()).equals(normalizeText(name)))
                 .toList();
     }
 
@@ -153,4 +141,65 @@ public class DisciplineService {
         return disciplineRepository.findByNameIgnoreCase(name)
                 .orElseThrow(() -> new RuntimeException("Nie znaleziono dyscypliny."));
     }
+
+    private boolean areDisciplinesSimilar(String input, String existing) {
+        String normalizedInput = normalizeText(input);
+        String normalizedExisting = normalizeText(existing);
+
+        if (normalizedInput.equals(normalizedExisting)) {
+            return true;
+        }
+
+        String[] inputWords = normalizedInput.split("\\s+");
+        String[] existingWords = normalizedExisting.split("\\s+");
+
+        if (inputWords.length != existingWords.length) {
+            return false;
+        }
+
+        int similarWords = 0;
+
+        for (int i = 0; i < inputWords.length; i++) {
+            int distance = levenshteinDistance(inputWords[i], existingWords[i]);
+
+            if (distance <= 1) {
+                similarWords++;
+            }
+        }
+
+        return similarWords == inputWords.length;
+    }
+
+    private String normalizeText(String text) {
+        return text == null ? "" : text
+                .toLowerCase()
+                .trim()
+                .replaceAll("\\s+", " ")
+                .replace("ą", "a")
+                .replace("ć", "c")
+                .replace("ę", "e")
+                .replace("ł", "l")
+                .replace("ń", "n")
+                .replace("ó", "o")
+                .replace("ś", "s")
+                .replace("ż", "z")
+                .replace("ź", "z");
+    }
+
+    private int levenshteinDistance(String first, String second) {
+        return LevenshteinDistance.getDefaultInstance().apply(first, second);
+    }
+
+    private String formatDisciplineName(String name) {
+
+        String normalized = normalizeText(name);
+
+        if (normalized.isBlank()) {
+            return normalized;
+        }
+
+        return normalized.substring(0, 1).toUpperCase()
+                + normalized.substring(1);
+    }
+
 }

@@ -46,6 +46,7 @@ const AdminPanel = () => {
     const navigate = useNavigate();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [selectedTab, setSelectedTab] = useState("dashboard");
+    const [disciplineToEditName, setDisciplineToEditName] = useState<string | null>(null);
 
 
     const userData = useMemo(() => {
@@ -106,12 +107,24 @@ const AdminPanel = () => {
             case "tournaments":
                 return <TournamentsManagement />;
             case "teams":
-                return <TeamsManagement />;
+                return (
+                    <TeamsManagement
+                        onConfigureDiscipline={(disciplineName: string) => {
+                            setDisciplineToEditName(disciplineName);
+                            setSelectedTab("disciplines");
+                        }}
+                    />
+                );
             case "players":
                 // Wywołanie wydzielonego komponentu
                 return <PlayersManagement userData={userData} />;
             case "disciplines":
-              return <DisciplinesManagement />;
+              return (
+                  <DisciplinesManagement
+                      disciplineToEditName={disciplineToEditName}
+                      onDisciplineEditHandled={() => setDisciplineToEditName(null)}
+                  />
+              );
 
             default:
                 return (
