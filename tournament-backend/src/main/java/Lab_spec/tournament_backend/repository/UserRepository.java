@@ -11,6 +11,7 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
     Optional<User> findByEmail(String email);
+    List<User> findByCreatedByEmailIgnoreCase(String email);
 
     @Query("SELECT u FROM User u WHERE u.email LIKE %:email%")
     List<User> searchByEmail(@Param("email") String email);

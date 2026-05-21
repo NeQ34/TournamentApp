@@ -20,9 +20,8 @@ public class PlayerController {
     // Pobierz tylko "użytkowników-zawodników" dodanych przez tego admina
     @GetMapping
     public List<User> getMyPlayers(@RequestParam String adminEmail) {
-        return userRepository.findAll().stream()
-                .filter(u -> adminEmail.equals(u.getCreatedByEmail()))
-                .toList();
+        System.out.println("Szukam zawodników dla admina: " + adminEmail); // Log do konsoli Javy
+        return userRepository.findByCreatedByEmailIgnoreCase(adminEmail);
     }
 
     @PostMapping

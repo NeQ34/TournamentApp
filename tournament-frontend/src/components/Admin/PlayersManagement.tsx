@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
     Box,
     Typography,
@@ -51,10 +51,10 @@ const PlayersManagement = ({ userData }: PlayersManagementProps) => {
         birthDate: ""
     });
 
-    const fetchPlayers = useCallback(async () => {
+    const fetchPlayers = async () => {
         if (!userData?.email) return;
         try {
-            const response = await fetch(`http://localhost:8080/api/players?adminEmail=${userData.email}`);
+            const response = await fetch(`http://localhost:8080/api/players?adminEmail=${encodeURIComponent(userData.email)}`);
             if (response.ok) {
                 const data = await response.json();
                 setPlayers(data);
@@ -62,38 +62,46 @@ const PlayersManagement = ({ userData }: PlayersManagementProps) => {
         } catch (error) {
             console.error("Błąd pobierania:", error);
         }
-    }, [userData?.email]);
+    };
 
     useEffect(() => {
         fetchPlayers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Pobierz raz przy zamontowaniu komponentu
+    }, [userData?.email]);
 
     const handleAddPlayer = async () => {
+        if (!newPlayer.firstName || !newPlayer.lastName || !newPlayer.email || !newPlayer.password) {
+            alert("Wypełnij wymagane pola!");
+            return;
+        }
+
         try {
             const response = await fetch("http://localhost:8080/api/players", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...newPlayer, createdByEmail: userData.email })
+                body: JSON.stringify({
+                    ...newPlayer,
+                    createdByEmail: userData.email
+                })
             });
 
             if (response.ok) {
                 setOpenModal(false);
-                fetchPlayers();
                 setNewPlayer({
                     firstName: "", lastName: "", email: "",
                     password: "", nickname: "", position: "", birthDate: ""
                 });
+                fetchPlayers();
             }
         } catch (error) {
-            console.error("Błąd dodawania zawodnika:", error);
+            console.error("Błąd dodawania:", error);
         }
     };
 
     const handleDeletePlayer = async (id: number) => {
         if (window.confirm("Czy na pewno chcesz usunąć tego zawodnika?")) {
-            await fetch(`http://localhost:8080/api/players/${id}`, { method: "DELETE" });
-            fetchPlayers();
+            const response = await fetch(`http://localhost:8080/api/players/${id}`, { method: "DELETE" });
+            if (response.ok) fetchPlayers();
         }
     };
 
