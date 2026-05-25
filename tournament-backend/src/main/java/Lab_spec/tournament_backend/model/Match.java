@@ -53,5 +53,6 @@ public class Match {
     @Column(name = "next_match_id")
     private Long nextMatchId;   // ID meczu, do którego przechodzi zwycięzca
 
-
+    @Column(length = 2000)
+    private String notes;
 }

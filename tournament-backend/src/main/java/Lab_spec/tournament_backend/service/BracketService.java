@@ -53,75 +53,99 @@ public class BracketService {
 
         List<Team> allTeams = new ArrayList<>(teams);
         for (int i = size; i < nextPowerOfTwo; i++) {
-            allTeams.add(null); // BYE = automatyczny awans
+            allTeams.add(null);
         }
 
-        // I runda
-        List<Match> roundMatches = new ArrayList<>();
-        int matchOrder = 0;
+        // Lista wszystkich meczów do zapisania
+        List<Match> allMatches = new ArrayList<>();
+        List<Match> currentRound = new ArrayList<>();
         int matchCounter = 1;
+
+        // I runda – mecze z drużynami
         for (int i = 0; i < allTeams.size(); i += 2) {
             Match match = new Match();
-            match.setMatchNumber(matchCounter++);
             match.setTournament(tournament);
             match.setTeamA(allTeams.get(i));
             match.setTeamB(allTeams.get(i + 1));
             match.setRoundNumber(1);
-            match.setMatchOrder(matchOrder++);
+            match.setMatchOrder(currentRound.size());
             match.setStatus("pending");
-            roundMatches.add(match);
+            match.setMatchNumber(matchCounter++);
+            currentRound.add(match);
         }
+        allMatches.addAll(currentRound);
 
-        List<Match> allMatches = new ArrayList<>(roundMatches);
-
-        // Kolejne rundy
+        // Kolejne rundy – tylko puste mecze
         int round = 2;
-        while (roundMatches.size() > 1) {
+        while (currentRound.size() > 1) {
             List<Match> nextRound = new ArrayList<>();
-            int nextMatchOrder = 0;
-            for (int i = 0; i < roundMatches.size(); i += 2) {
+            int matchesInNextRound = currentRound.size() / 2;
+            for (int i = 0; i < matchesInNextRound; i++) {
                 Match match = new Match();
                 match.setTournament(tournament);
                 match.setRoundNumber(round);
-                match.setMatchOrder(nextMatchOrder++);
+                match.setMatchOrder(i);
                 match.setStatus("pending");
-
-                // Podłączenie do poprzednich meczów
-                if (i < roundMatches.size()) {
-                    roundMatches.get(i).setNextMatchId(null); // będzie ustawione po zapisie
-                }
-                if (i + 1 < roundMatches.size()) {
-                    roundMatches.get(i + 1).setNextMatchId(null);
-                }
-
+                match.setMatchNumber(matchCounter++);
                 nextRound.add(match);
             }
             allMatches.addAll(nextRound);
-            roundMatches = nextRound;
+            currentRound = nextRound;
             round++;
         }
 
         // Zapisz wszystkie mecze
-        List<Match> savedMatches = matchRepository.saveAll(allMatches);
+        allMatches = matchRepository.saveAll(allMatches);
 
-        // Ustaw nextMatchId
-        int matchIndex = 0;
-        int roundSize = allTeams.size() / 2;
-        int matchesPerRound = roundSize;
+        // Teraz ustaw nextMatchId – łączymy mecze między rundami
+        // Indeksy w allMatches są w kolejności: runda 1, runda 2, runda 3...
+        int matchesPerRound = allTeams.size() / 2;
+        int startIndex = 0;
 
         for (int r = 1; r < round; r++) {
-            int nextRoundStart = matchIndex + matchesPerRound;
-            for (int i = 0; i < matchesPerRound; i++) {
-                Match currentMatch = savedMatches.get(matchIndex + i);
-                if (nextRoundStart + i / 2 < savedMatches.size()) {
-                    currentMatch.setNextMatchId(savedMatches.get(nextRoundStart + i / 2).getId());
+            int currentRoundMatches = matchesPerRound;
+            int nextRoundMatches = matchesPerRound / 2;
+
+            if (nextRoundMatches == 0) break;
+
+            int currentStart = startIndex;
+            int nextStart = startIndex + currentRoundMatches;
+
+            for (int i = 0; i < nextRoundMatches; i++) {
+                Match nextMatch = allMatches.get(nextStart + i);
+
+                // Pierwszy mecz źródłowy (lewa strona)
+                Match sourceMatch1 = allMatches.get(currentStart + i * 2);
+                sourceMatch1.setNextMatchId(nextMatch.getId());
+
+                // Drugi mecz źródłowy (prawa strona) – jeśli istnieje
+                if (i * 2 + 1 < currentRoundMatches) {
+                    Match sourceMatch2 = allMatches.get(currentStart + i * 2 + 1);
+                    sourceMatch2.setNextMatchId(nextMatch.getId());
                 }
             }
-            matchIndex += matchesPerRound;
-            matchesPerRound /= 2;
+
+            startIndex += currentRoundMatches;
+            matchesPerRound = nextRoundMatches;
         }
 
-        matchRepository.saveAll(savedMatches);
+        // Zapisz zaktualizowane nextMatchId
+        matchRepository.saveAll(allMatches);
+
+        // Automatyczne rozstrzygnięcie meczów BYE (gdzie drużyna A lub B jest null)
+        for (Match match : allMatches) {
+            if (match.getTeamA() == null && match.getTeamB() != null) {
+                match.setWinner(match.getTeamB());
+                match.setResult("BYE");
+                match.setStatus("completed");
+            } else if (match.getTeamB() == null && match.getTeamA() != null) {
+                match.setWinner(match.getTeamA());
+                match.setResult("BYE");
+                match.setStatus("completed");
+            }
+        }
+
+        matchRepository.saveAll(allMatches);
     }
 
     public List<Match> getBracket(Long tournamentId) {
@@ -129,31 +153,76 @@ public class BracketService {
     }
 
     @Transactional
-    public void updateMatchResult(Long matchId, String result, Long winnerId) {
+    public void updateMatchResult(Long matchId, String result, Long winnerId, String notes) {
         Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new RuntimeException("Mecz nie znaleziony"));
-
-        match.setResult(result);
-        match.setStatus("completed");
 
         Team winner = teamRepository.findById(winnerId)
                 .orElseThrow(() -> new RuntimeException("Drużyna nie znaleziona"));
 
+        // ZAPAMIĘTAJ poprzedniego zwycięzcę
+        Team oldWinner = match.getWinner();
+
+        match.setResult(result);
+        match.setStatus("completed");
         match.setWinner(winner);
+
+        if (notes != null && !notes.trim().isEmpty()) {
+            match.setNotes(notes);
+        }
+
+        matchRepository.save(match);
 
         // Przejście do następnego meczu
         if (match.getNextMatchId() != null) {
             Match nextMatch = matchRepository.findById(match.getNextMatchId())
                     .orElseThrow(() -> new RuntimeException("Następny mecz nie znaleziony"));
 
-            if (nextMatch.getTeamA() == null) {
-                nextMatch.setTeamA(winner);
-            } else if (nextMatch.getTeamB() == null) {
-                nextMatch.setTeamB(winner);
+            // USUŃ starego zwycięzcę z obu miejsc w następnym meczu
+            if (oldWinner != null) {
+                if (nextMatch.getTeamA() != null && nextMatch.getTeamA().getId().equals(oldWinner.getId())) {
+                    nextMatch.setTeamA(null);
+                }
+                if (nextMatch.getTeamB() != null && nextMatch.getTeamB().getId().equals(oldWinner.getId())) {
+                    nextMatch.setTeamB(null);
+                }
             }
-            matchRepository.save(nextMatch);
-        }
 
-        matchRepository.save(match);
+            // Znajdź wolne miejsce i ustaw nowego zwycięzcę
+            // WAŻNE: sprawdź czy nowy zwycięzca nie jest już w drugim miejscu
+            boolean isWinnerAlreadyInMatch = false;
+
+            if (nextMatch.getTeamA() != null && nextMatch.getTeamA().getId().equals(winner.getId())) {
+                isWinnerAlreadyInMatch = true;
+            }
+            if (nextMatch.getTeamB() != null && nextMatch.getTeamB().getId().equals(winner.getId())) {
+                isWinnerAlreadyInMatch = true;
+            }
+
+            if (!isWinnerAlreadyInMatch) {
+                // Znajdź pierwsze wolne miejsce
+                if (nextMatch.getTeamA() == null) {
+                    nextMatch.setTeamA(winner);
+                } else if (nextMatch.getTeamB() == null) {
+                    nextMatch.setTeamB(winner);
+                }
+            }
+
+            // Jeśli oba miejsca są puste, ustaw w teamA
+            if (nextMatch.getTeamA() == null && nextMatch.getTeamB() == null) {
+                nextMatch.setTeamA(winner);
+            }
+
+            matchRepository.save(nextMatch);
+
+            // DODATKOWO: sprawdź czy ten sam mecz nie ma dwóch identycznych drużyn
+            if (nextMatch.getTeamA() != null && nextMatch.getTeamB() != null &&
+                    nextMatch.getTeamA().getId().equals(nextMatch.getTeamB().getId())) {
+
+                // Wyczyść drugie miejsce
+                nextMatch.setTeamB(null);
+                matchRepository.save(nextMatch);
+            }
+        }
     }
 }

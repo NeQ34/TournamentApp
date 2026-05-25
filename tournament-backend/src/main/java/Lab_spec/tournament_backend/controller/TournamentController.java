@@ -129,6 +129,7 @@ public class TournamentController {
         List<Map<String, Object>> response = matches.stream().map(match -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", match.getId());
+            map.put("matchNumber", match.getMatchNumber());
             map.put("roundNumber", match.getRoundNumber());
             map.put("matchOrder", match.getMatchOrder());
             map.put("teamA", match.getTeamA() != null ? Map.of(
@@ -143,9 +144,7 @@ public class TournamentController {
             map.put("status", match.getStatus());
             map.put("winnerId", match.getWinner() != null ? match.getWinner().getId() : null);
             map.put("nextMatchId", match.getNextMatchId());
-            map.put("matchNumber", match.getMatchNumber());
-            map.put("sourceMatchAId", match.getSourceMatchAId());
-            map.put("sourceMatchBId", match.getSourceMatchBId());
+            map.put("notes", match.getNotes());  // ← DODAJ TĘ LINIĘ
             return map;
         }).collect(Collectors.toList());
 
@@ -159,7 +158,9 @@ public class TournamentController {
         try {
             String result = (String) body.get("result");
             Long winnerId = Long.valueOf(body.get("winnerId").toString());
-            bracketService.updateMatchResult(matchId, result, winnerId);
+            String notes = (String) body.get("notes"); // może być null
+
+            bracketService.updateMatchResult(matchId, result, winnerId, notes);
             return ResponseEntity.ok(Map.of("message", "Wynik zapisany"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));

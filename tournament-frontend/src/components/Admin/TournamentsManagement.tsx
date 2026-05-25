@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Box,
   Button,
+  Checkbox,
   Typography,
   Paper,
   Table,
@@ -15,6 +16,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  FormControlLabel,
   TextField,
   Select,
   MenuItem,
@@ -69,12 +71,11 @@ interface Match {
   matchOrder: number;
   teamA: { id: number; name: string } | null;
   teamB: { id: number; name: string } | null;
-  sourceMatchAId: number | null;
-    sourceMatchBId: number | null;
   result: string | null;
   status: string;
   winnerId: number | null;
   nextMatchId: number | null;
+  notes?: string;
 }
 
 const TournamentsManagement = () => {
@@ -121,6 +122,10 @@ const TournamentsManagement = () => {
   const [winnerId, setWinnerId] = useState<number | null>(null);
   const [dialogManageError, setDialogManageError] = useState("");
   const [dialogManageSuccess, setDialogManageSuccess] = useState("");
+  const [drawError, setDrawError] = useState("");
+
+  const [showNotes, setShowNotes] = useState(false);
+  const [matchNotes, setMatchNotes] = useState("");
 
   // Filtrowanie
   const filterTournaments = (list: Tournament[]) => {
@@ -204,31 +209,29 @@ const TournamentsManagement = () => {
   const fetchBracket = async (tournamentId: number) => {
     setBracketLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/tournaments/${tournamentId}/bracket`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
-      if (response.ok) {
-        const data = await response.json();
-
-        // Przenumeruj mecze – najpierw posortuj po rundzie i kolejności
-        const sortedMatches = [...data].sort((a, b) => {
-            if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber;
-            return a.matchOrder - b.matchOrder;
-        });
-        
-        // Dodaj numer porządkowy (od 1)
-        const matchesWithNumbers = sortedMatches.map((match, index) => ({
-            ...match,
-            matchNumber: index + 1  // ← DODAJEMY NUMER PORZĄDKOWY
-        }));
-
-        setBracket(data);
-      }
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${tournamentId}/bracket`,
+            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+        if (response.ok) {
+            let data = await response.json();
+            
+            data.sort((a: Match, b: Match) => {
+                if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber;
+                return a.matchOrder - b.matchOrder;
+            });
+            
+            const matchesWithNumbers = data.map((match: Match, index: number) => ({
+                ...match,
+                matchNumber: index + 1
+            }));
+            
+            setBracket(matchesWithNumbers);
+        }
     } catch (error) {
-      console.error("Błąd pobierania drabinki:", error);
+        console.error("Błąd pobierania drabinki:", error);
     } finally {
-      setBracketLoading(false);
+        setBracketLoading(false);
     }
   };
 
@@ -388,6 +391,9 @@ const TournamentsManagement = () => {
   const handleSaveScore = async () => {
     if (!selectedMatch) return;
     
+    // Wyczyść poprzedni błąd remisu
+    setDrawError("");
+    
     if (!score.trim()) {
         setDialogManageError("Wynik jest wymagany.");
         return;
@@ -399,22 +405,30 @@ const TournamentsManagement = () => {
     
     const [scoreA, scoreB] = score.split(":").map(Number);
     
+    // Sprawdź remis
+    if (scoreA === scoreB) {
+        setDrawError("Remis nie jest dozwolony w turnieju pucharowym. Wprowadź wynik z zwycięzcą.");
+        return;
+    }
+    
     let winnerId = null;
     if (scoreA > scoreB) {
         winnerId = selectedMatch.teamA?.id || null;
     } else if (scoreB > scoreA) {
         winnerId = selectedMatch.teamB?.id || null;
-    } else {
-        setDialogManageError("Remis nie jest dozwolony w turnieju pucharowym. Podaj zwycięzcę.");
-        return;
     }
     
     if (!winnerId) {
-        setDialogManageError("Nie można określić zwycięzcy. Brak drużyn w meczu.");
+        setDialogManageError("Nie można określić zwycięzcy.");
         return;
     }
     
     try {
+        const requestBody: any = { result: score, winnerId };
+        if (showNotes && matchNotes.trim()) {
+            requestBody.notes = matchNotes.trim();
+        }
+        
         const response = await fetch(
             `http://localhost:8080/api/admin/tournaments/matches/${selectedMatch.id}/result`,
             {
@@ -423,7 +437,7 @@ const TournamentsManagement = () => {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${localStorage.getItem("token")}`,
                 },
-                body: JSON.stringify({ result: score, winnerId }),
+                body: JSON.stringify(requestBody),
             }
         );
         if (response.ok) {
@@ -431,6 +445,9 @@ const TournamentsManagement = () => {
             setScoreDialogOpen(false);
             setSelectedMatch(null);
             setScore("");
+            setShowNotes(false);
+            setMatchNotes("");
+            setDrawError("");
             setDialogManageSuccess("Wynik został zapisany.");
         } else {
             const error = await response.json();
@@ -440,7 +457,7 @@ const TournamentsManagement = () => {
         console.error("Błąd:", error);
         setDialogManageError("Nie udało się połączyć z serwerem.");
     }
-};
+  };
 
   // ========== POMOCNICZE ==========
   const resetForm = () => {
@@ -483,12 +500,11 @@ const TournamentsManagement = () => {
   };
 
   const getTeamDisplayName = (match: Match, teamSide: 'A' | 'B', allMatches: Match[]): string => {
-    // Sprawdź czy drużyna jest już przypisana
     const team = teamSide === 'A' ? match.teamA : match.teamB;
     
-    // Jeśli drużyna istnieje, sprawdź skąd przyszła
+    // Jeśli drużyna jest bezpośrednio przypisana
     if (team) {
-        // Szukamy meczu, którego zwycięzca to ta drużyna i który wskazuje na ten mecz
+        // Sprawdź czy ta drużyna przyszła z poprzedniego meczu
         const sourceMatch = allMatches.find(m => 
             m.winnerId === team.id && m.nextMatchId === match.id
         );
@@ -498,74 +514,88 @@ const TournamentsManagement = () => {
         return team.name;
     }
     
-    // Jeśli drużyny nie ma, szukamy zwycięzcy z poprzednich meczów
-    // Znajdź wszystkie mecze które wskazują na ten mecz (nextMatchId = obecny mecz)
-    let previousMatches = allMatches.filter(m => m.nextMatchId === match.id);
+    // Szukamy meczów które wskazują na ten mecz (nextMatchId)
+    let sourceMatches = allMatches.filter(m => m.nextMatchId === match.id);
     
-    // Jeśli nie znaleziono po nextMatchId, spróbuj po kolejności w rundzie
-    if (previousMatches.length === 0 && match.roundNumber > 1) {
-        // Dla finału: szukamy zwycięzców półfinałów
+    // Jeśli nie znaleziono po nextMatchId, użyj kolejności rund
+    if (sourceMatches.length === 0 && match.roundNumber > 1) {
         const previousRound = match.roundNumber - 1;
-        const matchesInPreviousRound = allMatches.filter(m => m.roundNumber === previousRound);
+        const previousRoundMatches = allMatches
+            .filter(m => m.roundNumber === previousRound)
+            .sort((a, b) => a.matchOrder - b.matchOrder);
         
-        // Dla meczu w rundzie 2 (półfinał) – powinien mieć 2 poprzednie mecze
-        // Dla meczu w rundzie 3 (finał) – powinien mieć 2 poprzednie mecze (półfinały)
-        if (matchesInPreviousRound.length === 2) {
-            if (teamSide === 'A') {
-                previousMatches = [matchesInPreviousRound[0]];
-            } else {
-                previousMatches = [matchesInPreviousRound[1]];
-            }
-        } else if (matchesInPreviousRound.length === 4 && match.roundNumber === 2) {
-            // Ćwierćfinały → półfinały
-            const index = teamSide === 'A' ? 0 : 1;
-            previousMatches = [matchesInPreviousRound[index]];
+        // Podziel mecze z poprzedniej rundy na pół
+        const half = previousRoundMatches.length / 2;
+        
+        if (teamSide === 'A') {
+            sourceMatches = previousRoundMatches.slice(0, half);
         } else {
-            previousMatches = matchesInPreviousRound;
+            sourceMatches = previousRoundMatches.slice(half);
         }
     }
     
-    // Jeśli mamy poprzednie mecze
-    if (previousMatches.length > 0) {
-        // Dla miejsca A weź pierwszy mecz, dla miejsca B weź drugi (jeśli istnieje)
-        const sourceMatch = teamSide === 'A' ? previousMatches[0] : (previousMatches[1] || previousMatches[0]);
+    // Jeśli mamy źródłowe mecze
+    if (sourceMatches.length > 0) {
+        // Dla finału (2 źródła) lub dla pojedynczego źródła
+        const sourceMatch = teamSide === 'A' ? sourceMatches[0] : sourceMatches[sourceMatches.length - 1];
         
         if (sourceMatch && sourceMatch.winnerId) {
-            // Znajdź zwycięską drużynę
-            let winnerName = "";
-            if (sourceMatch.teamA?.id === sourceMatch.winnerId) {
-                winnerName = sourceMatch.teamA.name;
-            } else if (sourceMatch.teamB?.id === sourceMatch.winnerId) {
-                winnerName = sourceMatch.teamB.name;
+            const winner = getWinnerFromMatch(sourceMatch.id, allMatches);
+            if (winner) {
+                return `${winner.name} (z meczu ${sourceMatch.matchNumber})`;
             }
-            
-            if (winnerName) {
-                return `${winnerName} (z meczu ${sourceMatch.matchNumber})`;
+        }
+        
+        if (sourceMatch) {
+            // Sprawdź czy mecz źródłowy ma już zwycięzcę (może być BYE)
+            if (sourceMatch.winnerId) {
+                const winnerName = sourceMatch.teamA?.id === sourceMatch.winnerId 
+                    ? sourceMatch.teamA?.name 
+                    : sourceMatch.teamB?.name;
+                if (winnerName) {
+                    return `${winnerName} (z meczu ${sourceMatch.matchNumber})`;
+                }
             }
-            return `Zwycięzca meczu ${sourceMatch.matchNumber}`;
-        } else if (sourceMatch) {
             return `Zwycięzca meczu ${sourceMatch.matchNumber}`;
         }
     }
+    
     return "BYE";
-};
+  };
+
+  const isMatchLocked = (match: Match, allMatches: Match[]): boolean => {
+    // Jeśli mecz nie ma zwycięzcy – można edytować
+    if (!match.winnerId) return false;
+    
+    // Znajdź następny mecz
+    if (!match.nextMatchId) return false;
+    
+    const nextMatch = allMatches.find(m => m.id === match.nextMatchId);
+    if (!nextMatch) return false;
+    
+    // Blokuj tylko jeśli następny mecz ma wynik
+    return !!(nextMatch.result && nextMatch.winnerId);
+  };
 
   // Pobiera zwycięzcę meczu (nazwę drużyny i numer meczu źródłowego)
-const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: string; sourceMatchId: number } | null => {
+  const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: string; sourceMatchNumber: number } | null => {
     const match = allMatches.find(m => m.id === matchId);
-    if (!match || !match.winnerId) return null;
+    if (!match) return null;
     
-    // Znajdź zwycięską drużynę
-    let winnerName = "";
-    if (match.teamA?.id === match.winnerId) {
-        winnerName = match.teamA.name;
-    } else if (match.teamB?.id === match.winnerId) {
-        winnerName = match.teamB.name;
-    } else {
-        return null;
+    // Jeśli mecz ma zwycięzcę
+    if (match.winnerId) {
+        let winnerName = "";
+        if (match.teamA?.id === match.winnerId) {
+            winnerName = match.teamA.name;
+        } else if (match.teamB?.id === match.winnerId) {
+            winnerName = match.teamB.name;
+        }
+        if (winnerName) {
+            return { name: winnerName, sourceMatchNumber: match.matchNumber };
+        }
     }
     
-    return { name: winnerName, sourceMatchId: match.matchNumber};
+    return null;
   };
 
   const getMatchesMap = (matches: Match[]) => {
@@ -614,7 +644,29 @@ const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: strin
     return 'BYE';
   };
 
+  const handleCloseScoreDialog = () => {
+    setScoreDialogOpen(false);
+    setSelectedMatch(null);
+    setScore("");
+    setShowNotes(false);
+    setMatchNotes("");
+    setDrawError("");
+    setDialogManageError("");
+  };
 
+  const handleEditScore = (match: Match) => {
+    setSelectedMatch(match);
+    if (match.result) {
+        setScore(match.result);
+        setMatchNotes(match.notes || "");
+        setShowNotes(!!match.notes);
+    } else {
+        setScore("");
+        setMatchNotes("");
+        setShowNotes(false);
+    }
+    setScoreDialogOpen(true);
+  };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
@@ -1001,17 +1053,12 @@ const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: strin
                   <Typography>Drabinka nie została jeszcze wygenerowana. Kliknij przycisk powyżej.</Typography>
                 </Paper>
               )}
+              
 
               {bracket.length > 0 && (
               <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
                   {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => {
                       const roundMatches = bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder);
-                      // Oblicz offset numerów dla każdej rundy
-                      let startNumber = 1;
-                      for (let r = 1; r < round; r++) {
-                          const prevRoundMatches = bracket.filter(m => m.roundNumber === r);
-                          startNumber += prevRoundMatches.length;
-                      }
                       
                       return (
                           <Box key={round} sx={{ width: "100%" }}>
@@ -1019,52 +1066,81 @@ const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: strin
                                   Runda {round}
                               </Typography>
                               <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
-                                  {roundMatches.map((match, idx) => (
-                                      <Paper key={match.id} sx={{ p: 2, minWidth: 250, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative" }}>
-                                          {/* Numer meczu */}
-                                          <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
-                                              Mecz #{startNumber + idx}
-                                          </Typography>
-                                          
-                                          <Box sx={{ mt: 2 }}>
-                                              {/* Drużyna A */}
-                                              <Typography sx={{ fontWeight: 500 }}>
-                                                  {getTeamDisplayName(match, 'A', bracket)}
+                                  {roundMatches.map((match) => {
+                                      const isLocked = isMatchLocked(match, bracket);
+                                      
+                                      return (
+                                          <Paper key={match.id} sx={{ p: 2, minWidth: 250, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative", opacity: isLocked ? 0.7 : 1 }}>
+                                              {/* Numer meczu */}
+                                              <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
+                                                  Mecz #{match.matchNumber}
                                               </Typography>
                                               
-                                              <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
+                                              {/* Przycisk edycji */}
+                                              <IconButton
+                                                  size="small"
+                                                  onClick={() => handleEditScore(match)}
+                                                  disabled={isLocked}
+                                                  sx={{
+                                                      position: "absolute",
+                                                      bottom: 4,
+                                                      right: 8,
+                                                      color: "#FF6A00",
+                                                      bgcolor: "rgba(0,0,0,0.5)",
+                                                      "&:hover": { bgcolor: "rgba(255,106,0,0.3)" },
+                                                      "&.Mui-disabled": { color: "rgba(255,106,0,0.3)" }
+                                                  }}
+                                              >
+                                                  <EditIcon fontSize="small" />
+                                              </IconButton>
                                               
-                                              {/* Drużyna B */}
-                                              <Typography sx={{ fontWeight: 500 }}>
-                                                  {getTeamDisplayName(match, 'B', bracket)}
-                                              </Typography>
-                                              
-                                              {match.result && (
-                                                  <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
-                                                      Wynik: {match.result}
+                                              <Box sx={{ mt: 2, mb: 1 }}>
+                                                  <Typography sx={{ fontWeight: 500 }}>
+                                                      {getTeamDisplayName(match, 'A', bracket)}
                                                   </Typography>
-                                              )}
-                                              
-                                              {match.status === "pending" && match.teamA && match.teamB && (
-                                                  <Button
-                                                      size="small"
-                                                      variant="outlined"
-                                                      onClick={() => {
-                                                          setSelectedMatch(match);
-                                                          setScoreDialogOpen(true);
-                                                      }}
-                                                      sx={{ mt: 1, color: "#FF6A00" }}
-                                                  >
-                                                      Wprowadź wynik
-                                                  </Button>
-                                              )}
-                                              
-                                              {match.winnerId && (
-                                                  <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
-                                              )}
-                                          </Box>
-                                      </Paper>
-                                  ))}
+                                                  <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
+                                                  <Typography sx={{ fontWeight: 500 }}>
+                                                      {getTeamDisplayName(match, 'B', bracket)}
+                                                  </Typography>
+                                                  
+                                                  {match.result && (
+                                                      <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
+                                                          Wynik: {match.result}
+                                                      </Typography>
+                                                  )}
+                                                  
+                                                  {match.notes && (
+                                                      <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", mt: 0.5, display: "block" }}>
+                                                          {match.notes.length > 30 ? match.notes.substring(0, 30) + "..." : match.notes}
+                                                      </Typography>
+                                                  )}
+                                                  
+                                                  {match.status === "pending" && match.teamA && match.teamB && !match.result && !isLocked && (
+                                                      <Button
+                                                          size="small"
+                                                          variant="outlined"
+                                                          onClick={() => handleEditScore(match)}
+                                                          sx={{ mt: 1, color: "#FF6A00" }}
+                                                      >
+                                                          Wprowadź wynik
+                                                      </Button>
+                                                  )}
+                                                  
+                                                  {isLocked && (
+                                                      <Chip 
+                                                          label="Zablokowany (awans)" 
+                                                          size="small" 
+                                                          sx={{ mt: 1, bgcolor: "#ff9800", color: "#fff" }} 
+                                                      />
+                                                  )}
+                                                  
+                                                  {match.winnerId && !isLocked && (
+                                                      <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
+                                                  )}
+                                              </Box>
+                                          </Paper>
+                                      );
+                                  })}
                               </Box>
                           </Box>
                       );
@@ -1076,31 +1152,45 @@ const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: strin
 
           {/* Zakładka: Wyniki */}
           {tabValue === 2 && (
-            <Box>
+          <Box>
               {bracketLoading && <Typography>Ładowanie...</Typography>}
               {!bracketLoading && bracket.length === 0 && <Typography>Brak wygenerowanej drabinki.</Typography>}
-              {bracket.filter(m => m.teamA && m.teamB).map(match => (
-                <Paper key={match.id} sx={{ p: 2, mb: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <Typography>{match.teamA!.name} vs {match.teamB!.name}</Typography>
-                  {match.result ? (
-                    <Typography sx={{ color: "#4caf50" }}>Wynik: {match.result}</Typography>
-                  ) : (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => {
-                        setSelectedMatch(match);
-                        setScoreDialogOpen(true);
-                      }}
-                      sx={{ bgcolor: "#FF6A00" }}
-                    >
-                      Wprowadź wynik
-                    </Button>
-                  )}
-                </Paper>
-              ))}
-            </Box>
-          )}
+              {bracket.filter(m => m.teamA && m.teamB).map(match => {
+                  const isLocked = isMatchLocked(match, bracket);
+                  
+                  return (
+                      <Paper key={match.id} sx={{ p: 2, mb: 2, display: "flex", justifyContent: "space-between", alignItems: "center", opacity: isLocked ? 0.7 : 1 }}>
+                          <Box>
+                              <Typography>
+                                  Mecz #{match.matchNumber}: {match.teamA!.name} vs {match.teamB!.name}
+                              </Typography>
+                              {match.result && (
+                                  <Typography variant="caption" sx={{ color: "#4caf50" }}>
+                                      Wynik: {match.result}
+                                  </Typography>
+                              )}
+                              {match.notes && (
+                                  <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", display: "block" }}>
+                                      📝 {match.notes}
+                                  </Typography>
+                              )}
+                              {isLocked && (
+                                  <Chip label="Zablokowany (awans)" size="small" sx={{ mt: 1, bgcolor: "#ff9800", color: "#fff" }} />
+                              )}
+                          </Box>
+                          <IconButton
+                              onClick={() => handleEditScore(match)}
+                              disabled={isLocked}
+                              sx={{ color: "#FF6A00" }}
+                              title={isLocked ? "Mecz zablokowany – drużyna awansowała dalej" : "Edytuj wynik"}
+                          >
+                              <EditIcon />
+                          </IconButton>
+                      </Paper>
+                  );
+              })}
+          </Box>
+      )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSelectedTournamentForDetails(null)} sx={{ color: "#ccc" }}>Zamknij</Button>
@@ -1108,39 +1198,94 @@ const getWinnerFromMatch = (matchId: number, allMatches: Match[]): { name: strin
       </Dialog>
 
       {/* Dialog wprowadzania wyniku */}
-      <Dialog open={scoreDialogOpen} onClose={() => setScoreDialogOpen(false)} maxWidth="sm" fullWidth
-      PaperProps={{ sx: { bgcolor: "rgba(0,0,0,0.9)", color: "#fff", borderRadius: 4 } }}>
-      <DialogTitle>Wprowadź wynik</DialogTitle>
-      <DialogContent>
-          <Typography sx={{ mb: 2 }}>
-              {selectedMatch?.teamA?.name} vs {selectedMatch?.teamB?.name}
-          </Typography>
-          <TextField
-              fullWidth
-              label="Wynik (np. 4:3)"
-              value={score}
-              onChange={(e) => {
-                  // Tylko cyfry, dwukropek i backspace
-                  const value = e.target.value;
-                  if (value === "" || /^[\d:]*$/.test(value)) {
-                      setScore(value);
-                  }
-              }}
-              placeholder="np. 4:3"
-              inputProps={{ inputMode: "numeric", pattern: "[0-9:]*" }}
-              sx={{ mb: 2 }}
-              InputLabelProps={{ style: { color: "#ccc" } }}
-              autoFocus
-          />
-          <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.5)" }}>
-              Format: liczba:liczba (np. 3:1). Większa liczba wygrywa.
-          </Typography>
-      </DialogContent>
-      <DialogActions>
-          <Button onClick={() => setScoreDialogOpen(false)} sx={{ color: "#ccc" }}>Anuluj</Button>
-          <Button onClick={handleSaveScore} variant="contained" sx={{ bgcolor: "#FF6A00" }}>Zapisz</Button>
-      </DialogActions>
-  </Dialog>
+      <Dialog 
+        open={scoreDialogOpen} 
+        onClose={handleCloseScoreDialog} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{ sx: { bgcolor: "rgba(0,0,0,0.9)", color: "#fff", borderRadius: 4 } }}>
+        <DialogTitle>Wprowadź wynik</DialogTitle>
+        <DialogContent>
+
+              {drawError && (
+                <Alert 
+                    severity="error" 
+                    sx={{ 
+                        mb: 2, 
+                        borderRadius: 2,
+                        bgcolor: "rgba(244,67,54,0.15)",
+                        color: "#f44336"
+                    }}
+                >
+                    {drawError}
+                </Alert>
+            )}
+
+            <Typography sx={{ mb: 2 }}>
+                {selectedMatch?.teamA?.name} vs {selectedMatch?.teamB?.name}
+            </Typography>
+            
+            <TextField
+                fullWidth
+                label="Wynik (np. 4:3)"
+                value={score}
+                onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "" || /^[\d:]*$/.test(value)) {
+                        setScore(value);
+                        if (drawError) setDrawError("");
+                    }
+                }}
+                placeholder="np. 4:3"
+                inputProps={{ inputMode: "numeric", pattern: "[0-9:]*" }}
+                sx={{ mb: 2 }}
+                InputLabelProps={{ style: { color: "#ccc" } }}
+                autoFocus
+            />
+            
+            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.5)", display: "block", mb: 2 }}>
+                Format: liczba:liczba (np. 3:1). Większa liczba wygrywa.
+            </Typography>
+            
+            {/* Checkbox dla notatek */}
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        checked={showNotes}
+                        onChange={(e) => setShowNotes(e.target.checked)}
+                        sx={{ color: "#FF6A00", "&.Mui-checked": { color: "#FF6A00" } }}
+                    />
+                }
+                label="Notes"
+                sx={{ mb: 2 }}
+            />
+            
+            {/* Rozwijane pole tekstowe */}
+            {showNotes && (
+                <TextField
+                    fullWidth
+                    label="Przebieg meczu"
+                    multiline
+                    rows={4}
+                    value={matchNotes}
+                    onChange={(e) => setMatchNotes(e.target.value)}
+                    placeholder=""
+                    InputLabelProps={{ style: { color: "#ccc" } }}
+                    sx={{
+                        mb: 2,
+                        textarea: { color: "#fff" },
+                        "& .MuiOutlinedInput-root": {
+                            "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+                        }
+                    }}
+                />
+            )}
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={handleCloseScoreDialog} sx={{ color: "#ccc" }}>Anuluj</Button>
+            <Button onClick={handleSaveScore} variant="contained" sx={{ bgcolor: "#FF6A00" }}>Zapisz</Button>
+        </DialogActions>
+    </Dialog>
 
       {/* Dialog potwierdzenia usunięcia turnieju */}
       <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}
