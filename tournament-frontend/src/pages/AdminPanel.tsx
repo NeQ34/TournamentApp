@@ -39,6 +39,7 @@ import backgroundImage from "../photos/img2.jpg";
 import TeamsManagement from "../components/Admin/TeamsManagement";
 import DisciplinesManagement from "../components/Admin/DisciplinesManagement";
 import TournamentsManagement from "../components/Admin/TournamentsManagement";
+import ResultsView from "../components/Admin/ResultsView";
 
 const drawerWidth = 280;
 
@@ -116,8 +117,9 @@ const AdminPanel = () => {
                     />
                 );
             case "players":
-                // Wywołanie wydzielonego komponentu
                 return <PlayersManagement userData={userData} />;
+            case "results":
+                return <ResultsView />;
             case "disciplines":
               return (
                   <DisciplinesManagement
