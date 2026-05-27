@@ -8,7 +8,10 @@ import Lab_spec.tournament_backend.repository.TeamRepository;
 import Lab_spec.tournament_backend.repository.TournamentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class BracketService {
@@ -16,6 +19,12 @@ public class BracketService {
     private final MatchRepository matchRepository;
     private final TournamentRepository tournamentRepository;
     private final TeamRepository teamRepository;
+
+    private static final int DEFAULT_MATCH_DURATION = 90;
+    private static final int BREAK_BETWEEN_MATCHES = 15;
+    private static final int BREAK_BETWEEN_ROUNDS = 30;
+
+    private static final int BREAK_BETWEEN_MATCHES_SAME_COURT = 15;
 
     public BracketService(MatchRepository matchRepository,
                           TournamentRepository tournamentRepository,
@@ -26,7 +35,7 @@ public class BracketService {
     }
 
     @Transactional
-    public void generateBracket(Long tournamentId, boolean randomize) {
+    public void generateBracket(Long tournamentId, boolean randomize, int numberOfCourts) {
         Tournament tournament = tournamentRepository.findById(tournamentId)
                 .orElseThrow(() -> new RuntimeException("Turniej nie znaleziony"));
 
@@ -145,7 +154,65 @@ public class BracketService {
             }
         }
 
+        // Po wygenerowaniu drabinki i ustawieniu nextMatchId, dodaj:
+        LocalDateTime startTime = tournament.getStartDate() != null
+                ? tournament.getStartDate().atTime(10, 0)
+                : LocalDateTime.now().withHour(10).withMinute(0);
+
+        // Przelicz godziny od pierwszego meczu
+        if (!allMatches.isEmpty()) {
+            Match firstMatch = allMatches.stream()
+                    .filter(m -> m.getRoundNumber() == 1 && m.getMatchOrder() == 0)
+                    .findFirst()
+                    .orElse(allMatches.get(0));
+
+            recalculateTimesWithCourts(firstMatch.getId(), startTime, numberOfCourts);
+        }
+
         matchRepository.saveAll(allMatches);
+    }
+
+    private void recalculateTimesWithCourts(Long startMatchId, LocalDateTime startTime, int numberOfCourts) {
+        Match firstMatch = matchRepository.findById(startMatchId).orElse(null);
+        if (firstMatch == null) return;
+
+        Long tournamentId = firstMatch.getTournament().getId();
+
+        // Grupuj mecze według rund
+        List<Integer> rounds = matchRepository.findByTournamentIdOrderByRoundNumberAscMatchOrderAsc(tournamentId)
+                .stream()
+                .map(Match::getRoundNumber)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+
+        LocalDateTime currentTime = startTime;
+        int court = 1;
+
+        for (int round : rounds) {
+            List<Match> matchesInRound = matchRepository.findByTournamentIdAndRoundNumberOrderByMatchOrder(tournamentId, round);
+
+            // Przypisz czasy i boiska dla meczów w rundzie
+            int matchIndex = 0;
+            while (matchIndex < matchesInRound.size()) {
+                for (int c = 1; c <= numberOfCourts && matchIndex < matchesInRound.size(); c++) {
+                    Match match = matchesInRound.get(matchIndex);
+                    match.setScheduledTime(currentTime);
+                    match.setCourtNumber(c);
+                    matchRepository.save(match);
+                    matchIndex++;
+                }
+                // Przejdź do następnego slotu czasowego
+                if (matchIndex < matchesInRound.size()) {
+                    currentTime = currentTime.plusMinutes(DEFAULT_MATCH_DURATION + BREAK_BETWEEN_MATCHES_SAME_COURT);
+                }
+            }
+
+            // Przerwa między rundami
+            if (round < rounds.get(rounds.size() - 1)) {
+                currentTime = currentTime.plusMinutes(BREAK_BETWEEN_ROUNDS);
+            }
+        }
     }
 
     public List<Match> getBracket(Long tournamentId) {
@@ -224,5 +291,61 @@ public class BracketService {
                 matchRepository.save(nextMatch);
             }
         }
+    }
+
+    @Transactional
+    public void updateMatchTime(Long matchId, String scheduledTimeStr) {
+        Match match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new RuntimeException("Mecz nie znaleziony"));
+
+        LocalDateTime newTime = LocalDateTime.parse(scheduledTimeStr);
+        LocalDateTime oldTime = match.getScheduledTime();
+
+        match.setScheduledTime(newTime);
+        matchRepository.save(match);
+
+        // Przelicz godziny dla wszystkich meczów po tym meczu
+        if (match.getNextMatchId() != null) {
+            recalculateTimes(match.getNextMatchId(),
+                    newTime.plusMinutes(calculateMatchDuration(match)));
+        }
+    }
+
+    private void recalculateTimes(Long startMatchId, LocalDateTime startTime) {
+        Match current = matchRepository.findById(startMatchId).orElse(null);
+        if (current == null) return;
+
+        Long tournamentId = current.getTournament().getId();
+        LocalDateTime time = startTime;
+
+        while (current != null) {
+            current.setScheduledTime(time);
+            matchRepository.save(current);
+
+            // Pobierz wszystkie mecze w tej samej rundzie i turnieju
+            List<Match> sameRound = matchRepository.findByTournamentIdAndRoundNumberOrderByMatchOrder(
+                    tournamentId,
+                    current.getRoundNumber()
+            );
+
+            int currentIndex = sameRound.indexOf(current);
+
+            if (currentIndex + 1 < sameRound.size()) {
+                // Następny mecz w tej samej rundzie
+                current = sameRound.get(currentIndex + 1);
+                time = time.plusMinutes(calculateMatchDuration(current) + BREAK_BETWEEN_MATCHES);
+            } else {
+                // Koniec rundy – przejdź do następnej rundy
+                Long nextMatchId = current.getNextMatchId();
+                current = nextMatchId != null ? matchRepository.findById(nextMatchId).orElse(null) : null;
+                if (current != null) {
+                    time = time.plusMinutes(BREAK_BETWEEN_ROUNDS);
+                }
+            }
+        }
+    }
+
+    private int calculateMatchDuration(Match match) {
+        return DEFAULT_MATCH_DURATION;
     }
 }

@@ -112,9 +112,9 @@ public class TournamentController {
 
     // Generowanie drabinki
     @PostMapping("/{id}/generate-bracket")
-    public ResponseEntity<?> generateBracket(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean randomize) {
+    public ResponseEntity<?> generateBracket(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean randomize, @RequestParam(defaultValue = "1") int numberOfCourts) {
         try {
-            bracketService.generateBracket(id, randomize);
+            bracketService.generateBracket(id, randomize, numberOfCourts);
             return ResponseEntity.ok(Map.of("message", "Drabinka została wygenerowana"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -144,7 +144,9 @@ public class TournamentController {
             map.put("status", match.getStatus());
             map.put("winnerId", match.getWinner() != null ? match.getWinner().getId() : null);
             map.put("nextMatchId", match.getNextMatchId());
-            map.put("notes", match.getNotes());  // ← DODAJ TĘ LINIĘ
+            map.put("notes", match.getNotes());
+            map.put("scheduledTime", match.getScheduledTime());
+            map.put("courtNumber", match.getCourtNumber());
             return map;
         }).collect(Collectors.toList());
 
@@ -162,6 +164,18 @@ public class TournamentController {
 
             bracketService.updateMatchResult(matchId, result, winnerId, notes);
             return ResponseEntity.ok(Map.of("message", "Wynik zapisany"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/matches/{matchId}/time")
+    public ResponseEntity<?> updateMatchTime(@PathVariable Long matchId,
+                                             @RequestBody Map<String, String> body) {
+        try {
+            String scheduledTime = body.get("scheduledTime");
+            bracketService.updateMatchTime(matchId, scheduledTime);
+            return ResponseEntity.ok(Map.of("message", "Godzina zaktualizowana"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }

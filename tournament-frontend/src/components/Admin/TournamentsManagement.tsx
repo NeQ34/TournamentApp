@@ -76,6 +76,8 @@ interface Match {
   winnerId: number | null;
   nextMatchId: number | null;
   notes?: string;
+  scheduledTime?: string;
+  courtNumber?: number;
 }
 
 const TournamentsManagement = () => {
@@ -91,6 +93,11 @@ const TournamentsManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [editingTimeMatch, setEditingTimeMatch] = useState<Match | null>(null);
+  const [tempTime, setTempTime] = useState("");
+  const [matchDuration, setMatchDuration] = useState(60);
+  const [breakBetweenMatches, setBreakBetweenMatches] = useState(15);
+  const [startHour, setStartHour] = useState(10);
 
   // Formularz
   const [formData, setFormData] = useState({
@@ -126,6 +133,7 @@ const TournamentsManagement = () => {
 
   const [showNotes, setShowNotes] = useState(false);
   const [matchNotes, setMatchNotes] = useState("");
+  const [numberOfCourts, setNumberOfCourts] = useState(1);
 
   // Filtrowanie
   const filterTournaments = (list: Tournament[]) => {
@@ -223,7 +231,8 @@ const TournamentsManagement = () => {
             
             const matchesWithNumbers = data.map((match: Match, index: number) => ({
                 ...match,
-                matchNumber: index + 1
+                matchNumber: index + 1,
+                courtNumber: match.courtNumber
             }));
             
             setBracket(matchesWithNumbers);
@@ -233,6 +242,50 @@ const TournamentsManagement = () => {
     } finally {
         setBracketLoading(false);
     }
+  };
+
+  const formatDateTimeForInput = (dateTime: string | null) => {
+    if (!dateTime) return "";
+    return dateTime.slice(0, 16);
+  };
+
+  const handleUpdateMatchTime = async (matchId: number, scheduledTime: string) => {
+    try {
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/matches/${matchId}/time`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+                body: JSON.stringify({ scheduledTime }),
+            }
+        );
+        if (response.ok) {
+            await fetchBracket(selectedTournamentForDetails!.id);
+            setDialogManageSuccess("Godzina meczu została zaktualizowana.");
+        } else {
+            const error = await response.json();
+            setDialogManageError(error.message || "Błąd zapisu godziny");
+        }
+    } catch (error) {
+        console.error("Błąd:", error);
+        setDialogManageError("Nie udało się połączyć z serwerem.");
+    }
+};
+
+  const formatMatchDateTime = (scheduledTime: string | null | undefined) => {
+    if (!scheduledTime) return "Brak daty";
+    
+    const date = new Date(scheduledTime);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return `${day}.${month}.${year} ${hours}:${minutes}`;
   };
 
   // ========== OPERACJE NA TURNIEJACH ==========
@@ -370,89 +423,112 @@ const TournamentsManagement = () => {
     if (!selectedTournamentForDetails) return;
     setGenerating(true);
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/generate-bracket?randomize=${randomize}`,
-        { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
-      if (response.ok) {
-        await fetchBracket(selectedTournamentForDetails.id);
-        setDialogSuccess("Drabinka została wygenerowana.");
-      } else {
-        const error = await response.json();
-        setDialogError(error.message || "Błąd generowania drabinki");
-      }
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/generate-bracket?randomize=${randomize}&numberOfCourts=${numberOfCourts}`,
+            { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+        if (response.ok) {
+            await fetchBracket(selectedTournamentForDetails.id);
+            setDialogSuccess("Drabinka została wygenerowana.");
+        } else {
+            const error = await response.json();
+            setDialogError(error.message || "Błąd generowania drabinki");
+        }
     } catch (error) {
-      console.error("Błąd:", error);
+        console.error("Błąd:", error);
     } finally {
-      setGenerating(false);
+        setGenerating(false);
     }
   };
 
   const handleSaveScore = async () => {
     if (!selectedMatch) return;
     
-    // Wyczyść poprzedni błąd remisu
     setDrawError("");
     
-    if (!score.trim()) {
-        setDialogManageError("Wynik jest wymagany.");
-        return;
-    }
-    if (!isValidScore(score)) {
-        setDialogManageError("Nieprawidłowy format wyniku. Użyj formatu: liczba:liczba (np. 3:1)");
-        return;
-    }
+    // Sprawdź czy chcemy zapisać tylko datę (bez wyniku)
+    const hasResult = score.trim() !== "";
     
-    const [scoreA, scoreB] = score.split(":").map(Number);
-    
-    // Sprawdź remis
-    if (scoreA === scoreB) {
-        setDrawError("Remis nie jest dozwolony w turnieju pucharowym. Wprowadź wynik z zwycięzcą.");
-        return;
-    }
-    
-    let winnerId = null;
-    if (scoreA > scoreB) {
-        winnerId = selectedMatch.teamA?.id || null;
-    } else if (scoreB > scoreA) {
-        winnerId = selectedMatch.teamB?.id || null;
-    }
-    
-    if (!winnerId) {
-        setDialogManageError("Nie można określić zwycięzcy.");
-        return;
+    // Walidacja tylko jeśli jest wynik
+    if (hasResult) {
+        if (!isValidScore(score)) {
+            setDialogManageError("Nieprawidłowy format wyniku. Użyj formatu: liczba:liczba (np. 3:1)");
+            return;
+        }
+        
+        const [scoreA, scoreB] = score.split(":").map(Number);
+        
+        if (scoreA === scoreB) {
+            setDrawError("Remis nie jest dozwolony w turnieju pucharowym.");
+            return;
+        }
     }
     
     try {
-        const requestBody: any = { result: score, winnerId };
-        if (showNotes && matchNotes.trim()) {
-            requestBody.notes = matchNotes.trim();
+        // ZAWSZE zapisz datę/godzinę (jeśli zmieniona)
+        if (selectedMatch.scheduledTime) {
+            await fetch(
+                `http://localhost:8080/api/admin/tournaments/matches/${selectedMatch.id}/time`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    },
+                    body: JSON.stringify({ scheduledTime: selectedMatch.scheduledTime }),
+                }
+            );
         }
         
-        const response = await fetch(
-            `http://localhost:8080/api/admin/tournaments/matches/${selectedMatch.id}/result`,
-            {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("token")}`,
-                },
-                body: JSON.stringify(requestBody),
+        // Zapisz wynik TYLKO jeśli został wprowadzony
+        if (hasResult) {
+            const [scoreA, scoreB] = score.split(":").map(Number);
+            let winnerId = null;
+            if (scoreA > scoreB) {
+                winnerId = selectedMatch.teamA?.id || null;
+            } else if (scoreB > scoreA) {
+                winnerId = selectedMatch.teamB?.id || null;
             }
-        );
-        if (response.ok) {
-            await fetchBracket(selectedTournamentForDetails!.id);
-            setScoreDialogOpen(false);
-            setSelectedMatch(null);
-            setScore("");
-            setShowNotes(false);
-            setMatchNotes("");
-            setDrawError("");
-            setDialogManageSuccess("Wynik został zapisany.");
-        } else {
-            const error = await response.json();
-            setDialogManageError(error.message || "Błąd zapisu wyniku");
+            
+            if (!winnerId) {
+                setDialogManageError("Nie można określić zwycięzcy.");
+                return;
+            }
+            
+            const requestBody: any = { result: score, winnerId };
+            if (showNotes && matchNotes.trim()) {
+                requestBody.notes = matchNotes.trim();
+            }
+            
+            const response = await fetch(
+                `http://localhost:8080/api/admin/tournaments/matches/${selectedMatch.id}/result`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    },
+                    body: JSON.stringify(requestBody),
+                }
+            );
+            
+            if (!response.ok) {
+                const error = await response.json();
+                setDialogManageError(error.message || "Błąd zapisu wyniku");
+                return;
+            }
         }
+        
+        // Odśwież drabinkę
+        await fetchBracket(selectedTournamentForDetails!.id);
+        setScoreDialogOpen(false);
+        setSelectedMatch(null);
+        setScore("");
+        setShowNotes(false);
+        setMatchNotes("");
+        setDrawError("");
+        setDialogManageSuccess(hasResult ? "Wynik i godzina zostały zapisane." : "Godzina meczu została zapisana.");
+        
     } catch (error) {
         console.error("Błąd:", error);
         setDialogManageError("Nie udało się połączyć z serwerem.");
@@ -1044,6 +1120,23 @@ const TournamentsManagement = () => {
                 >
                   Losuj pary: {randomize ? "TAK" : "NIE"}
                 </Button>
+                <TextField
+                  type="number"
+                  label="Liczba miejsc"
+                  value={numberOfCourts}
+                  disabled={bracket.length > 0}
+                  onChange={(e) => setNumberOfCourts(Math.max(1, parseInt(e.target.value) || 1))}
+                  size="small"
+                  sx={{
+                      width: 120,
+                      "& .MuiOutlinedInput-root": {
+                          color: "#fff",
+                          "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+                      },
+                      "& .MuiInputLabel-root": { color: "#ccc" }
+                  }}
+                  InputLabelProps={{ shrink: true }}
+              />
               </Box>
 
               {bracketLoading && <Typography sx={{ textAlign: "center", py: 4 }}>Ładowanie drabinki...</Typography>}
@@ -1070,75 +1163,103 @@ const TournamentsManagement = () => {
                                       const isLocked = isMatchLocked(match, bracket);
                                       
                                       return (
-                                          <Paper key={match.id} sx={{ p: 2, minWidth: 250, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative", opacity: isLocked ? 0.7 : 1 }}>
-                                              {/* Numer meczu */}
-                                              <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
-                                                  Mecz #{match.matchNumber}
-                                              </Typography>
-                                              
-                                              {/* Przycisk edycji */}
-                                              <IconButton
-                                                  size="small"
-                                                  onClick={() => handleEditScore(match)}
-                                                  disabled={isLocked}
-                                                  sx={{
-                                                      position: "absolute",
-                                                      bottom: 4,
-                                                      right: 8,
+                                          <Paper key={match.id} sx={{ p: 2, minWidth: 280, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative", opacity: isLocked ? 0.7 : 1 }}>
+                                          {/* Numer meczu */}
+                                          <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
+                                              Mecz #{match.matchNumber}
+                                          </Typography>
+
+                                          {/* Boisko */}
+                                          {match.courtNumber && (
+                                              <Typography 
+                                                  variant="caption" 
+                                                  sx={{ 
+                                                      position: "absolute", 
+                                                      top: 4, 
+                                                      left: 80, 
                                                       color: "#FF6A00",
-                                                      bgcolor: "rgba(0,0,0,0.5)",
-                                                      "&:hover": { bgcolor: "rgba(255,106,0,0.3)" },
-                                                      "&.Mui-disabled": { color: "rgba(255,106,0,0.3)" }
+                                                      fontWeight: "bold",
+                                                      fontSize: "0.7rem",
+                                                      bgcolor: "rgba(255,106,0,0.2)",
+                                                      px: 0.8,
+                                                      borderRadius: 1
                                                   }}
                                               >
-                                                  <EditIcon fontSize="small" />
-                                              </IconButton>
+                                                  Boisko {match.courtNumber}
+                                              </Typography>
+                                          )}
+
+                                          <Typography 
+                                              variant="caption" 
+                                              sx={{ 
+                                                  position: "absolute", 
+                                                  top: 4, 
+                                                  right: 8, 
+                                                  color: match.scheduledTime ? "#4caf50" : "rgba(255,255,255,0.5)",
+                                                  fontWeight: match.scheduledTime ? "bold" : "normal",
+                                                  fontSize: "0.7rem"
+                                              }}
+                                          >
+                                              {formatMatchDateTime(match.scheduledTime)}
+                                          </Typography>
+                                          
+                                          {/* Przycisk edycji wyniku */}
+                                          <IconButton
+                                              size="small"
+                                              onClick={() => handleEditScore(match)}
+                                              disabled={isLocked}
+                                              sx={{
+                                                  position: "absolute",
+                                                  bottom: 4,
+                                                  right: 8,
+                                                  color: "#FF6A00",
+                                                  bgcolor: "rgba(0,0,0,0.5)",
+                                              }}
+                                          >
+                                              <EditIcon fontSize="small" />
+                                          </IconButton>
+                                          
+                                          <Box sx={{ mt: 2, mb: 1 }}>                                             
+                                              <Typography sx={{ fontWeight: 500 }}>
+                                                  {getTeamDisplayName(match, 'A', bracket)}
+                                              </Typography>
+                                              <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
+                                              <Typography sx={{ fontWeight: 500 }}>
+                                                  {getTeamDisplayName(match, 'B', bracket)}
+                                              </Typography>
                                               
-                                              <Box sx={{ mt: 2, mb: 1 }}>
-                                                  <Typography sx={{ fontWeight: 500 }}>
-                                                      {getTeamDisplayName(match, 'A', bracket)}
+                                              {match.result && (
+                                                  <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
+                                                      Wynik: {match.result}
                                                   </Typography>
-                                                  <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
-                                                  <Typography sx={{ fontWeight: 500 }}>
-                                                      {getTeamDisplayName(match, 'B', bracket)}
+                                              )}
+                                              
+                                              {match.notes && (
+                                                  <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", mt: 0.5, display: "block" }}>
+                                                      📝 {match.notes.length > 30 ? match.notes.substring(0, 30) + "..." : match.notes}
                                                   </Typography>
-                                                  
-                                                  {match.result && (
-                                                      <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
-                                                          Wynik: {match.result}
-                                                      </Typography>
-                                                  )}
-                                                  
-                                                  {match.notes && (
-                                                      <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", mt: 0.5, display: "block" }}>
-                                                          {match.notes.length > 30 ? match.notes.substring(0, 30) + "..." : match.notes}
-                                                      </Typography>
-                                                  )}
-                                                  
-                                                  {match.status === "pending" && match.teamA && match.teamB && !match.result && !isLocked && (
-                                                      <Button
-                                                          size="small"
-                                                          variant="outlined"
-                                                          onClick={() => handleEditScore(match)}
-                                                          sx={{ mt: 1, color: "#FF6A00" }}
-                                                      >
-                                                          Wprowadź wynik
-                                                      </Button>
-                                                  )}
-                                                  
-                                                  {isLocked && (
-                                                      <Chip 
-                                                          label="Zablokowany (awans)" 
-                                                          size="small" 
-                                                          sx={{ mt: 1, bgcolor: "#ff9800", color: "#fff" }} 
-                                                      />
-                                                  )}
-                                                  
-                                                  {match.winnerId && !isLocked && (
-                                                      <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
-                                                  )}
-                                              </Box>
-                                          </Paper>
+                                              )}
+                                              
+                                              {match.status === "pending" && match.teamA && match.teamB && !match.result && !isLocked && (
+                                                  <Button
+                                                      size="small"
+                                                      variant="outlined"
+                                                      onClick={() => handleEditScore(match)}
+                                                      sx={{ mt: 1, color: "#FF6A00" }}
+                                                  >
+                                                      Wprowadź wynik
+                                                  </Button>
+                                              )}
+                                              
+                                              {isLocked && (
+                                                  <Chip label="Zablokowany (awans)" size="small" sx={{ mt: 1, bgcolor: "#ff9800", color: "#fff" }} />
+                                              )}
+                                              
+                                              {match.winnerId && !isLocked && (
+                                                  <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
+                                              )}
+                                          </Box>
+                                      </Paper>
                                       );
                                   })}
                               </Box>
@@ -1224,6 +1345,28 @@ const TournamentsManagement = () => {
             <Typography sx={{ mb: 2 }}>
                 {selectedMatch?.teamA?.name} vs {selectedMatch?.teamB?.name}
             </Typography>
+
+            {/* Informacja o boisku */}
+            {selectedMatch?.courtNumber && (
+                <Typography sx={{ textAlign: "center", mb: 2, color: "#FF6A00" }}>
+                    Boisko {selectedMatch.courtNumber}
+                </Typography>
+            )}
+
+            <TextField
+              type="datetime-local"
+              label="Data i godzina meczu"
+              value={selectedMatch?.scheduledTime ? selectedMatch.scheduledTime.slice(0, 16) : ""}
+              onChange={(e) => {
+                  if (selectedMatch) {
+                      const updatedMatch = { ...selectedMatch, scheduledTime: e.target.value };
+                      setSelectedMatch(updatedMatch);
+                  }
+              }}
+              fullWidth
+              sx={{ mb: 2 }}
+              InputLabelProps={{ shrink: true }}
+          />
             
             <TextField
                 fullWidth
