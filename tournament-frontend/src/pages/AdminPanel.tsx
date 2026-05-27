@@ -40,6 +40,7 @@ import TeamsManagement from "../components/Admin/TeamsManagement";
 import DisciplinesManagement from "../components/Admin/DisciplinesManagement";
 import TournamentsManagement from "../components/Admin/TournamentsManagement";
 import ResultsView from "../components/Admin/ResultsView";
+import ScheduleView from "../components/Admin/ScheduleView";
 
 const drawerWidth = 280;
 
@@ -107,6 +108,8 @@ const AdminPanel = () => {
                 );
             case "tournaments":
                 return <TournamentsManagement />;
+            case "schedule":
+                return <ScheduleView />;
             case "teams":
                 return (
                     <TeamsManagement
