@@ -45,51 +45,59 @@ public class BracketService {
             throw new RuntimeException("Za mało drużyn do wygenerowania drabinki (minimum 2)");
         }
 
-        // Usuń stare mecze
         matchRepository.deleteByTournamentId(tournamentId);
 
-        // Losowanie lub zachowanie kolejności
         if (randomize) {
             Collections.shuffle(teams);
         }
 
-        // Uzupełnienie do potęgi dwójki (BYE)
-        int size = teams.size();
+        int teamsCount = teams.size();
         int nextPowerOfTwo = 1;
-        while (nextPowerOfTwo < size) {
+
+        while (nextPowerOfTwo < teamsCount) {
             nextPowerOfTwo <<= 1;
         }
 
-        List<Team> allTeams = new ArrayList<>(teams);
-        for (int i = size; i < nextPowerOfTwo; i++) {
-            allTeams.add(null);
-        }
+        int byes = nextPowerOfTwo - teamsCount;
 
-        // Lista wszystkich meczów do zapisania
         List<Match> allMatches = new ArrayList<>();
         List<Match> currentRound = new ArrayList<>();
         int matchCounter = 1;
 
-        // I runda – mecze z drużynami
-        for (int i = 0; i < allTeams.size(); i += 2) {
+        // Najpierw mecze z wolnym losem
+        for (int i = 0; i < byes; i++) {
             Match match = new Match();
             match.setTournament(tournament);
-            match.setTeamA(allTeams.get(i));
-            match.setTeamB(allTeams.get(i + 1));
+            match.setTeamA(teams.get(i));
+            match.setTeamB(null);
             match.setRoundNumber(1);
             match.setMatchOrder(currentRound.size());
             match.setStatus("pending");
             match.setMatchNumber(matchCounter++);
             currentRound.add(match);
         }
+
+        // Potem normalne pary
+        for (int i = byes; i < teams.size(); i += 2) {
+            Match match = new Match();
+            match.setTournament(tournament);
+            match.setTeamA(teams.get(i));
+            match.setTeamB(teams.get(i + 1));
+            match.setRoundNumber(1);
+            match.setMatchOrder(currentRound.size());
+            match.setStatus("pending");
+            match.setMatchNumber(matchCounter++);
+            currentRound.add(match);
+        }
+
         allMatches.addAll(currentRound);
 
-        // Kolejne rundy – tylko puste mecze
         int round = 2;
+
         while (currentRound.size() > 1) {
             List<Match> nextRound = new ArrayList<>();
-            int matchesInNextRound = currentRound.size() / 2;
-            for (int i = 0; i < matchesInNextRound; i++) {
+
+            for (int i = 0; i < currentRound.size() / 2; i++) {
                 Match match = new Match();
                 match.setTournament(tournament);
                 match.setRoundNumber(round);
@@ -98,24 +106,24 @@ public class BracketService {
                 match.setMatchNumber(matchCounter++);
                 nextRound.add(match);
             }
+
             allMatches.addAll(nextRound);
             currentRound = nextRound;
             round++;
         }
 
-        // Zapisz wszystkie mecze
         allMatches = matchRepository.saveAll(allMatches);
 
-        // Teraz ustaw nextMatchId – łączymy mecze między rundami
-        // Indeksy w allMatches są w kolejności: runda 1, runda 2, runda 3...
-        int matchesPerRound = allTeams.size() / 2;
+        int matchesPerRound = nextPowerOfTwo / 2;
         int startIndex = 0;
 
         for (int r = 1; r < round; r++) {
             int currentRoundMatches = matchesPerRound;
             int nextRoundMatches = matchesPerRound / 2;
 
-            if (nextRoundMatches == 0) break;
+            if (nextRoundMatches == 0) {
+                break;
+            }
 
             int currentStart = startIndex;
             int nextStart = startIndex + currentRoundMatches;
@@ -123,43 +131,59 @@ public class BracketService {
             for (int i = 0; i < nextRoundMatches; i++) {
                 Match nextMatch = allMatches.get(nextStart + i);
 
-                // Pierwszy mecz źródłowy (lewa strona)
                 Match sourceMatch1 = allMatches.get(currentStart + i * 2);
                 sourceMatch1.setNextMatchId(nextMatch.getId());
 
-                // Drugi mecz źródłowy (prawa strona) – jeśli istnieje
-                if (i * 2 + 1 < currentRoundMatches) {
-                    Match sourceMatch2 = allMatches.get(currentStart + i * 2 + 1);
-                    sourceMatch2.setNextMatchId(nextMatch.getId());
-                }
+                Match sourceMatch2 = allMatches.get(currentStart + i * 2 + 1);
+                sourceMatch2.setNextMatchId(nextMatch.getId());
             }
 
             startIndex += currentRoundMatches;
             matchesPerRound = nextRoundMatches;
         }
 
-        // Zapisz zaktualizowane nextMatchId
-        matchRepository.saveAll(allMatches);
+        allMatches = matchRepository.saveAll(allMatches);
 
-        // Automatyczne rozstrzygnięcie meczów BYE (gdzie drużyna A lub B jest null)
+        // Wolne losy tylko w pierwszej rundzie
         for (Match match : allMatches) {
-            if (match.getTeamA() == null && match.getTeamB() != null) {
-                match.setWinner(match.getTeamB());
+            if (match.getRoundNumber() != 1) {
+                continue;
+            }
+
+            Team byeWinner = null;
+
+            if (match.getTeamA() != null && match.getTeamB() == null) {
+                byeWinner = match.getTeamA();
+            }
+
+            if (byeWinner != null) {
+                match.setWinner(byeWinner);
                 match.setResult("BYE");
                 match.setStatus("completed");
-            } else if (match.getTeamB() == null && match.getTeamA() != null) {
-                match.setWinner(match.getTeamA());
-                match.setResult("BYE");
-                match.setStatus("completed");
+
+                if (match.getNextMatchId() != null) {
+                    Match nextMatch = allMatches.stream()
+                            .filter(m -> m.getId().equals(match.getNextMatchId()))
+                            .findFirst()
+                            .orElse(null);
+
+                    if (nextMatch != null) {
+                        if (nextMatch.getTeamA() == null) {
+                            nextMatch.setTeamA(byeWinner);
+                        } else if (nextMatch.getTeamB() == null) {
+                            nextMatch.setTeamB(byeWinner);
+                        }
+                    }
+                }
             }
         }
 
-        // Po wygenerowaniu drabinki i ustawieniu nextMatchId, dodaj:
+        allMatches = matchRepository.saveAll(allMatches);
+
         LocalDateTime startTime = tournament.getStartDate() != null
                 ? tournament.getStartDate().atTime(10, 0)
                 : LocalDateTime.now().withHour(10).withMinute(0);
 
-        // Przelicz godziny od pierwszego meczu
         if (!allMatches.isEmpty()) {
             Match firstMatch = allMatches.stream()
                     .filter(m -> m.getRoundNumber() == 1 && m.getMatchOrder() == 0)
@@ -168,8 +192,6 @@ public class BracketService {
 
             recalculateTimesWithCourts(firstMatch.getId(), startTime, numberOfCourts);
         }
-
-        matchRepository.saveAll(allMatches);
     }
 
     private void recalculateTimesWithCourts(Long startMatchId, LocalDateTime startTime, int numberOfCourts) {

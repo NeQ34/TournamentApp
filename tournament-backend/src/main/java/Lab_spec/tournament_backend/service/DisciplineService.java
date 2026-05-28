@@ -100,12 +100,14 @@ public class DisciplineService {
                 .orElseGet(() -> {
                     Discipline discipline = new Discipline();
                     discipline.setName(normalizedName);
+                    discipline.setMinMembers(1);
+                    discipline.setMaxMembers(1);
 
                     Discipline saved = disciplineRepository.save(discipline);
-
                     return saved.getName();
                 });
     }
+
 
     public List<Discipline> findSimilarDisciplines(String name) {
         if (name == null || name.isBlank()) {
@@ -191,15 +193,14 @@ public class DisciplineService {
     }
 
     private String formatDisciplineName(String name) {
-
-        String normalized = normalizeText(name);
-
-        if (normalized.isBlank()) {
-            return normalized;
+        if (name == null || name.isBlank()) {
+            throw new RuntimeException("Nazwa dyscypliny jest wymagana.");
         }
 
-        return normalized.substring(0, 1).toUpperCase()
-                + normalized.substring(1);
+        String cleaned = name.trim().replaceAll("\\s+", " ").toLowerCase();
+
+        return cleaned.substring(0, 1).toUpperCase() + cleaned.substring(1);
     }
+
 
 }

@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Service
 public class TournamentService {
@@ -227,9 +228,27 @@ public class TournamentService {
         response.setEndDate(tournament.getEndDate());
         response.setLocation(tournament.getLocation());
         response.setDescription(tournament.getDescription());
-        response.setStatus(tournament.getStatus());
+        response.setStatus(calculateTournamentStatus(tournament));
         response.setMaxTeams(tournament.getMaxTeams());
         response.setRegisteredTeamsCount(tournament.getTeams() != null ? tournament.getTeams().size() : 0);
         return response;
+    }
+
+    private String calculateTournamentStatus(Tournament tournament) {
+        if ("archived".equalsIgnoreCase(tournament.getStatus())) {
+            return "archived";
+        }
+
+        LocalDate today = LocalDate.now();
+        if (tournament.getStartDate() == null) {
+            return "planned";
+        }
+        if (today.isBefore(tournament.getStartDate())) {
+            return "planned";
+        }
+        if (tournament.getEndDate() != null && today.isAfter(tournament.getEndDate())) {
+            return "finished";
+        }
+        return "ongoing";
     }
 }

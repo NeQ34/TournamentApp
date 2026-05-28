@@ -107,7 +107,7 @@ const TournamentsManagement = () => {
     endDate: "",
     location: "",
     description: "",
-    status: "planned" as Tournament["status"],
+    status: "auto" as any,
     maxTeams: "",
   });
 
@@ -126,13 +126,16 @@ const TournamentsManagement = () => {
   const [scoreDialogOpen, setScoreDialogOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [score, setScore] = useState("");
+  const [extraTimeScore, setExtraTimeScore] = useState("");
+  const [penaltyScore, setPenaltyScore] = useState("");
   const [winnerId, setWinnerId] = useState<number | null>(null);
   const [dialogManageError, setDialogManageError] = useState("");
   const [dialogManageSuccess, setDialogManageSuccess] = useState("");
   const [drawError, setDrawError] = useState("");
-
+  const [scoreDialogError, setScoreDialogError] = useState("");
   const [showNotes, setShowNotes] = useState(false);
   const [matchNotes, setMatchNotes] = useState("");
+  const [setScores, setSetScores] = useState<string[]>([]);
   const [numberOfCourts, setNumberOfCourts] = useState(1);
 
   // Filtrowanie
@@ -141,8 +144,206 @@ const TournamentsManagement = () => {
     return list.filter((t) => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
   };
 
-  const isValidScore = (value: string) => {
-    return /^\d+:\d+$/.test(value);
+  const getScorePlaceholder = (discipline?: string) => {
+      switch (discipline?.toLowerCase()) {
+          case "siatkówka":
+              return "np. 3:1";
+          case "szachy":
+              return "np. 1:0";
+          case "tenis":
+              return "np. 2:1";
+          default:
+              return "np. 4:3";
+      }
+  };
+
+  type ScoreConfig = {
+    label: string;
+    placeholder: string;
+    helperText: string;
+    pattern: RegExp;
+    detailsLabel?: string;
+    detailsPlaceholder?: string;
+  };
+
+  const normalizeDiscipline = (value?: string) =>
+    value?.toLowerCase().trim() || "";
+
+  const getScoreConfig = (discipline?: string): ScoreConfig => {
+    const d = normalizeDiscipline(discipline);
+
+    if (d === "szachy") {
+      return {
+        label: "Wynik partii",
+        placeholder: "np. 1:0",
+        helperText: "Dozwolone: 1:0 albo 0:1. Remis nie jest dozwolony w turnieju pucharowym.",
+        pattern: /^(1:0|0:1)$/,
+        detailsLabel: "Opis partii",
+        detailsPlaceholder: "np. zwycięstwo białych, walkower, czas przeciwnika",
+      };
+    }
+
+    if (d === "siatkówka") {
+      return {
+        label: "Wynik w setach",
+        placeholder: "np. 3:1",
+        helperText: "Dozwolone: 3:0, 3:1, 3:2, 0:3, 1:3, 2:3.",
+        pattern: /^(3:0|3:1|3:2|0:3|1:3|2:3)$/,
+        detailsLabel: "Wyniki setów",
+        detailsPlaceholder: "np. 25:20, 22:25, 25:18, 25:19",
+      };
+    }
+
+    if (d === "tenis ziemny" || d === "tenis stołowy") {
+      return {
+        label: "Wynik w setach",
+        placeholder: "np. 2:1",
+        helperText: "Dozwolone: 2:0, 2:1, 0:2, 1:2.",
+        pattern: /^(2:0|2:1|0:2|1:2)$/,
+        detailsLabel: "Wyniki setów",
+        detailsPlaceholder: "np. 6:4, 3:6, 7:5",
+      };
+    }
+
+    return {
+      label: "Wynik meczu w czasie podstawowym",
+      placeholder: "np. 4:3",
+      helperText: "Format: liczba:liczba, np. 3:1. Remis nie jest dozwolony w turnieju pucharowym.",
+      pattern: /^\d+:\d+$/,
+      detailsLabel: "Dodatkowe informacje",
+      detailsPlaceholder: "np. dogrywka, karne, przebieg meczu",
+    };
+  };
+
+  const isValidScore = (score: string, discipline?: string) => {
+    return getScoreConfig(discipline).pattern.test(score);
+  };
+
+  const supportsExtraTime = (discipline?: string) => {
+    const d = normalizeDiscipline(discipline);
+    return d === "piłka nożna" || d === "piłka wodna" || d === "hokej";
+  };
+
+  const getScoreHelperText = (discipline?: string) => {
+    if (supportsExtraTime(discipline)) {
+      return "Wpisz wynik czasu podstawowego. Jeśli będzie remis, automatycznie pojawi się pole dogrywki, a potem rzutów karnych.";
+    }
+
+    return getScoreConfig(discipline).helperText;
+  };
+
+  const isDrawScore = (value: string) => {
+    const [a, b] = value.split(":").map(Number);
+    return !Number.isNaN(a) && !Number.isNaN(b) && a === b;
+  };
+
+  const isSetDiscipline = (discipline?: string) => {
+    const d = normalizeDiscipline(discipline);
+    return d === "siatkówka" || d === "tenis ziemny" || d === "tenis stołowy";
+  };
+
+  const getNumberOfSetsFromScore = (value: string) => {
+    if (!/^\d+:\d+$/.test(value)) return 0;
+
+    const [a, b] = value.split(":").map(Number);
+    return a + b;
+  };
+
+  const validateSetScoresConsistency = (
+    mainScore: string,
+    setScores: string[],
+    teamAName?: string,
+    teamBName?: string
+  ) => {
+    if (!/^\d+:\d+$/.test(mainScore)) return "Nieprawidłowy wynik główny.";
+
+    const [expectedA, expectedB] = mainScore.split(":").map(Number);
+
+    const filledSets = setScores.filter(s => s.trim() !== "");
+
+    if (filledSets.length !== expectedA + expectedB) {
+      return `Wpisz dokładnie ${expectedA + expectedB} wyników setów.`;
+    }
+
+    let wonByA = 0;
+    let wonByB = 0;
+
+    for (let i = 0; i < filledSets.length; i++) {
+      const set = filledSets[i];
+
+      if (!/^\d+:\d+$/.test(set)) {
+        return `Set ${i + 1} ma nieprawidłowy format. Użyj np. 25:20.`;
+      }
+
+      const [a, b] = set.split(":").map(Number);
+
+      if (a === b) {
+        return `Set ${i + 1} nie może zakończyć się remisem.`;
+      }
+
+      if (a > b) wonByA++;
+      if (b > a) wonByB++;
+    }
+
+    if (wonByA !== expectedA || wonByB !== expectedB) {
+      return `Wyniki setów nie zgadzają się z wynikiem głównym. `;
+    }
+
+    return "";
+  };
+
+  const getWinnerFromScore = (
+    value: string,
+    teamAId?: number,
+    teamBId?: number
+  ) => {
+    const [a, b] = value.split(":").map(Number);
+
+    if (a > b) return teamAId || null;
+    if (b > a) return teamBId || null;
+
+    return null;
+  };
+
+  const getDisplayResult = (
+    result: string | null,
+    discipline?: string
+  ) => {
+    if (!result) {
+      return { main: "", details: "" };
+    }
+
+    const parts = result.split(",").map(p => p.trim());
+    const base = parts[0];
+
+    const extra = parts.find(p => p.startsWith("dogr."));
+    const penalties = parts.find(p => p.startsWith("karne"));
+
+    if (penalties) {
+      return {
+        main: penalties.replace("karne ", "") + " po karnych",
+        details: `czas podstawowy: ${base}${extra ? `, dogrywka: ${extra.replace("dogr. ", "")}` : ""}`,
+      };
+    }
+
+    if (extra) {
+      return {
+        main: extra.replace("dogr. ", "") + " po dogrywce",
+        details: `czas podstawowy: ${base}`,
+      };
+    }
+
+    if (isSetDiscipline(discipline)) {
+      return {
+        main: base,
+        details: "",
+      };
+    }
+
+    return {
+      main: base + " w czasie podstawowym",
+      details: "",
+    };
   };
 
   // ========== POBIERANIE DANYCH ==========
@@ -325,7 +526,7 @@ const TournamentsManagement = () => {
           endDate: formData.endDate || null,
           location: formData.location || null,
           description: formData.description || null,
-          status: formData.status,
+          status: formData.status === "archived" ? "archived" : "auto",
           maxTeams: formData.maxTeams ? Number(formData.maxTeams) : null,
         }),
       });
@@ -443,28 +644,73 @@ const TournamentsManagement = () => {
 
   const handleSaveScore = async () => {
     if (!selectedMatch) return;
-    
+
+    setScoreDialogError("");
     setDrawError("");
     
     // Sprawdź czy chcemy zapisać tylko datę (bez wyniku)
     const hasResult = score.trim() !== "";
-    
+
+    // Nie można zapisać wyniku bez daty meczu
+    if (hasResult && !selectedMatch.scheduledTime) {
+        setScoreDialogError("Najpierw ustaw datę i godzinę meczu.");
+        return;
+    }
+
     // Walidacja tylko jeśli jest wynik
     if (hasResult) {
-        if (!isValidScore(score)) {
-            setDialogManageError("Nieprawidłowy format wyniku. Użyj formatu: liczba:liczba (np. 3:1)");
-            return;
+        const scoreConfig = getScoreConfig(selectedTournamentForDetails?.discipline);
+
+        if (!isValidScore(score, selectedTournamentForDetails?.discipline)) {
+          setScoreDialogError(scoreConfig.helperText);
+          return;
         }
-        
-        const [scoreA, scoreB] = score.split(":").map(Number);
-        
-        if (scoreA === scoreB) {
-            setDrawError("Remis nie jest dozwolony w turnieju pucharowym.");
+
+        if (isSetDiscipline(selectedTournamentForDetails?.discipline)) {
+          const setError = validateSetScoresConsistency(
+            score,
+            setScores,
+            selectedMatch.teamA?.name,
+            selectedMatch.teamB?.name
+          );
+
+          if (setError) {
+            setScoreDialogError(setError);
             return;
+          }
         }
     }
     
     try {
+        const tournament = tournaments.find(
+            t => t.id === selectedTournamentForDetails?.id
+        );
+
+        if (selectedMatch.scheduledTime && tournament) {
+            const matchDate = new Date(selectedMatch.scheduledTime);
+            const startDate = new Date(tournament.startDate);
+
+            // ustaw początek dnia
+            startDate.setHours(0, 0, 0, 0);
+
+            if (matchDate < startDate) {
+                setDrawError("Data meczu nie może być wcześniejsza niż data rozpoczęcia turnieju.");
+                return;
+            }
+
+            if (tournament.endDate) {
+                const endDate = new Date(tournament.endDate);
+
+                // koniec dnia
+                endDate.setHours(23, 59, 59, 999);
+
+                if (matchDate > endDate) {
+                    setDrawError("Data meczu nie może być późniejsza niż data zakończenia turnieju.");
+                    return;
+                }
+            }
+        }
+
         // ZAWSZE zapisz datę/godzinę (jeśli zmieniona)
         if (selectedMatch.scheduledTime) {
             await fetch(
@@ -482,21 +728,67 @@ const TournamentsManagement = () => {
         
         // Zapisz wynik TYLKO jeśli został wprowadzony
         if (hasResult) {
-            const [scoreA, scoreB] = score.split(":").map(Number);
-            let winnerId = null;
-            if (scoreA > scoreB) {
-                winnerId = selectedMatch.teamA?.id || null;
-            } else if (scoreB > scoreA) {
-                winnerId = selectedMatch.teamB?.id || null;
+            let decidingScore = score;
+
+            if (supportsExtraTime(selectedTournamentForDetails?.discipline) && isDrawScore(score)) {
+                if (!extraTimeScore.trim()) {
+                    setScoreDialogError("Wpisz wynik po dogrywce.");
+                    return;
+                }
+
+                if (!/^\d+:\d+$/.test(extraTimeScore)) {
+                    setScoreDialogError("Nieprawidłowy format dogrywki. Użyj np. 2:1.");
+                    return;
+                }
+
+                decidingScore = extraTimeScore;
+
+                if (isDrawScore(extraTimeScore)) {
+                    if (!penaltyScore.trim()) {
+                        setScoreDialogError("Wpisz wynik rzutów karnych.");
+                        return;
+                    }
+
+                    if (!/^\d+:\d+$/.test(penaltyScore)) {
+                        setScoreDialogError("Nieprawidłowy format rzutów karnych. Użyj np. 5:4.");
+                        return;
+                    }
+
+                    if (isDrawScore(penaltyScore)) {
+                        setScoreDialogError("Rzuty karne muszą wskazywać zwycięzcę.");
+                        return;
+                    }
+
+                    decidingScore = penaltyScore;
+                }
             }
+
+            const winnerId = getWinnerFromScore(
+                decidingScore,
+                selectedMatch.teamA?.id,
+                selectedMatch.teamB?.id
+            );
             
             if (!winnerId) {
-                setDialogManageError("Nie można określić zwycięzcy.");
+                setScoreDialogError("Nie można określić zwycięzcy. Najpierw rozstrzygnij wcześniejsze mecze.");
                 return;
             }
             
-            const requestBody: any = { result: score, winnerId };
-            if (showNotes && matchNotes.trim()) {
+            let finalResult = score;
+
+            if (extraTimeScore.trim()) {
+                finalResult += `, dogr. ${extraTimeScore}`;
+            }
+
+            if (penaltyScore.trim()) {
+                finalResult += `, karne ${penaltyScore}`;
+            }
+
+            const requestBody: any = { result: finalResult, winnerId };
+
+            if (isSetDiscipline(selectedTournamentForDetails?.discipline)) {
+                requestBody.notes = setScores.filter(Boolean).join(", ");
+            } else if (showNotes && matchNotes.trim()) {
                 requestBody.notes = matchNotes.trim();
             }
             
@@ -544,7 +836,7 @@ const TournamentsManagement = () => {
       endDate: "",
       location: "",
       description: "",
-      status: "planned",
+      status: "auto",
       maxTeams: "",
     });
     setSelectedTournament(null);
@@ -561,7 +853,7 @@ const TournamentsManagement = () => {
       endDate: tournament.endDate || "",
       location: tournament.location || "",
       description: tournament.description || "",
-      status: tournament.status,
+      status: tournament.status === "archived" ? "archived" : "auto",
       maxTeams: tournament.maxTeams?.toString() || "",
     });
     setOpenDialog(true);
@@ -728,21 +1020,52 @@ const TournamentsManagement = () => {
     setMatchNotes("");
     setDrawError("");
     setDialogManageError("");
+    setScoreDialogError("");
+    setExtraTimeScore("");
+    setPenaltyScore("");
+    setSetScores([]);
   };
 
   const handleEditScore = (match: Match) => {
-    setSelectedMatch(match);
-    if (match.result) {
-        setScore(match.result);
-        setMatchNotes(match.notes || "");
-        setShowNotes(!!match.notes);
-    } else {
-        setScore("");
-        setMatchNotes("");
-        setShowNotes(false);
-    }
-    setScoreDialogOpen(true);
-  };
+       setSelectedMatch(match);
+
+       if (match.result) {
+           const parts = match.result.split(",").map(p => p.trim());
+
+           const baseScore = parts[0];
+
+           const extra = parts.find(p => p.startsWith("dogr."));
+           const penalties = parts.find(p => p.startsWith("karne"));
+
+           setScore(baseScore);
+
+           setExtraTimeScore(
+               extra ? extra.replace("dogr. ", "") : ""
+           );
+
+           setPenaltyScore(
+               penalties ? penalties.replace("karne ", "") : ""
+           );
+           setSetScores(
+               match.notes
+                   ? match.notes.split(",").map(s => s.trim())
+                   : []
+           );
+
+           setMatchNotes(match.notes || "");
+           setShowNotes(!!match.notes);
+       } else {
+           setScore("");
+           setExtraTimeScore("");
+           setPenaltyScore("");
+           setSetScores([]);
+
+           setMatchNotes("");
+           setShowNotes(false);
+       }
+
+       setScoreDialogOpen(true);
+   };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
@@ -998,15 +1321,16 @@ const TournamentsManagement = () => {
             />
             <FormControl fullWidth>
               <InputLabel sx={{ color: "#ccc" }}>Status</InputLabel>
+
               <Select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as Tournament["status"] })}
+                onChange={(e) =>
+                  setFormData({ ...formData, status: e.target.value as any })
+                }
                 label="Status"
                 sx={{ color: "#fff" }}
               >
-                <MenuItem value="planned">Planowany</MenuItem>
-                <MenuItem value="ongoing">Trwający</MenuItem>
-                <MenuItem value="finished">Zakończony</MenuItem>
+                <MenuItem value="auto">Automatyczny według daty</MenuItem>
                 <MenuItem value="archived">Archiwalny</MenuItem>
               </Select>
             </FormControl>
@@ -1220,18 +1544,68 @@ const TournamentsManagement = () => {
                                           </IconButton>
                                           
                                           <Box sx={{ mt: 2, mb: 1 }}>                                             
-                                              <Typography sx={{ fontWeight: 500 }}>
-                                                  {getTeamDisplayName(match, 'A', bracket)}
-                                              </Typography>
-                                              <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
-                                              <Typography sx={{ fontWeight: 500 }}>
-                                                  {getTeamDisplayName(match, 'B', bracket)}
-                                              </Typography>
-                                              
-                                              {match.result && (
-                                                  <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
-                                                      Wynik: {match.result}
-                                                  </Typography>
+                                              {match.result === "BYE" ? (
+                                                  <>
+                                                      <Typography sx={{ fontWeight: 700, fontSize: "1.1rem" }}>
+                                                          {match.teamA?.name || match.teamB?.name}
+                                                      </Typography>
+
+                                                      <Typography sx={{ color: "#FF6A00", mt: 1, fontWeight: "bold" }}>
+                                                          Wolny los — automatyczny awans
+                                                      </Typography>
+                                                  </>
+                                              ) : (
+                                                  <>
+                                                      <Typography sx={{ fontWeight: 500 }}>
+                                                          {getTeamDisplayName(match, 'A', bracket)}
+                                                      </Typography>
+
+                                                      <Typography variant="h6" sx={{ my: 1 }}>
+                                                          vs
+                                                      </Typography>
+
+                                                      <Typography sx={{ fontWeight: 500 }}>
+                                                          {getTeamDisplayName(match, 'B', bracket)}
+                                                      </Typography>
+
+                                                      {match.result && (() => {
+                                                        const display = getDisplayResult(
+                                                          match.result,
+                                                          selectedTournamentForDetails?.discipline
+                                                        );
+
+                                                        return (
+                                                          <>
+                                                            <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
+                                                              Wynik: {display.main}
+                                                            </Typography>
+
+                                                            {display.details && (
+                                                              <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", display: "block" }}>
+                                                                {display.details}
+                                                              </Typography>
+                                                            )}
+                                                          </>
+                                                        );
+                                                      })()}
+                                                      {match.winnerId && (
+                                                          <Typography
+                                                              variant="caption"
+                                                              sx={{
+                                                                  display: "block",
+                                                                  mt: 0.5,
+                                                                  color: "#FFD700",
+                                                                  fontWeight: "bold"
+                                                              }}
+                                                          >
+                                                              Wygrany: {
+                                                                  match.teamA?.id === match.winnerId
+                                                                      ? match.teamA?.name
+                                                                      : match.teamB?.name
+                                                              }
+                                                          </Typography>
+                                                      )}
+                                                  </>
                                               )}
                                               
                                               {match.notes && (
@@ -1285,11 +1659,59 @@ const TournamentsManagement = () => {
                               <Typography>
                                   Mecz #{match.matchNumber}: {match.teamA!.name} vs {match.teamB!.name}
                               </Typography>
-                              {match.result && (
-                                  <Typography variant="caption" sx={{ color: "#4caf50" }}>
-                                      Wynik: {match.result}
+
+                              {match.result && (() => {
+                                  const display = getDisplayResult(
+                                    match.result,
+                                    selectedTournamentForDetails?.discipline
+                                  );
+
+                                  return (
+                                      <>
+                                          <Typography
+                                              variant="caption"
+                                              sx={{
+                                                  color: "#4caf50",
+                                                  display: "block",
+                                                  fontWeight: "bold"
+                                              }}
+                                          >
+                                              Wynik: {display.main}
+                                          </Typography>
+
+                                          {display.details && (
+                                              <Typography
+                                                  variant="caption"
+                                                  sx={{
+                                                      color: "rgba(255,255,255,0.6)",
+                                                      display: "block"
+                                                  }}
+                                              >
+                                                  {display.details}
+                                              </Typography>
+                                          )}
+                                      </>
+                                  );
+                              })()}
+
+                              {match.winnerId && (
+                                  <Typography
+                                      variant="caption"
+                                      sx={{
+                                          display: "block",
+                                          mt: 0.5,
+                                          color: "#FFD700",
+                                          fontWeight: "bold"
+                                      }}
+                                  >
+                                      Wygrany: {
+                                          match.teamA?.id === match.winnerId
+                                              ? match.teamA?.name
+                                              : match.teamB?.name
+                                      }
                                   </Typography>
                               )}
+
                               {match.notes && (
                                   <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", display: "block" }}>
                                       📝 {match.notes}
@@ -1342,6 +1764,18 @@ const TournamentsManagement = () => {
                 </Alert>
             )}
 
+            {scoreDialogError && (
+                <Alert
+                    severity="error"
+                    sx={{
+                        mb: 2,
+                        borderRadius: 2
+                    }}
+                >
+                    {scoreDialogError}
+                </Alert>
+            )}
+
             <Typography sx={{ mb: 2 }}>
                 {selectedMatch?.teamA?.name} vs {selectedMatch?.teamB?.name}
             </Typography>
@@ -1369,50 +1803,138 @@ const TournamentsManagement = () => {
           />
             
             <TextField
+              fullWidth
+              label={getScoreConfig(selectedTournamentForDetails?.discipline).label}
+              value={score}
+              onChange={(e) => {
+                const value = e.target.value;
+
+                if (value === "" || /^[\d:.]*$/.test(value)) {
+                  setScore(value);
+                  if (isSetDiscipline(selectedTournamentForDetails?.discipline)) {
+                    const setsCount = getNumberOfSetsFromScore(value);
+                    setSetScores(Array.from({ length: setsCount }, (_, i) => setScores[i] || ""));
+                  }
+                  setScoreDialogError("");
+                  if (drawError) setDrawError("");
+                }
+              }}
+              placeholder={getScoreConfig(selectedTournamentForDetails?.discipline).placeholder}
+              inputProps={{ inputMode: "decimal" }}
+              sx={{ mb: 1 }}
+              InputLabelProps={{ style: { color: "#ccc" } }}
+            />
+
+            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.55)", display: "block", mb: 2 }}>
+              {getScoreHelperText(selectedTournamentForDetails?.discipline)}
+            </Typography>
+
+            {supportsExtraTime(selectedTournamentForDetails?.discipline) && isDrawScore(score) && (
+              <TextField
                 fullWidth
-                label="Wynik (np. 4:3)"
-                value={score}
+                label="Wynik po dogrywce"
+                value={extraTimeScore}
                 onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "" || /^[\d:]*$/.test(value)) {
-                        setScore(value);
-                        if (drawError) setDrawError("");
-                    }
+                  const value = e.target.value;
+                  if (value === "" || /^[\d:]*$/.test(value)) {
+                    setExtraTimeScore(value);
+                    setScoreDialogError("");
+                  }
                 }}
-                placeholder="np. 4:3"
-                inputProps={{ inputMode: "numeric", pattern: "[0-9:]*" }}
+                placeholder="np. 2:1"
+                inputProps={{ inputMode: "numeric" }}
                 sx={{ mb: 2 }}
                 InputLabelProps={{ style: { color: "#ccc" } }}
-                autoFocus
-            />
-            
-            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.5)", display: "block", mb: 2 }}>
-                Format: liczba:liczba (np. 3:1). Większa liczba wygrywa.
-            </Typography>
-            
+              />
+            )}
+
+            {supportsExtraTime(selectedTournamentForDetails?.discipline) &&
+              isDrawScore(score) &&
+              isDrawScore(extraTimeScore) && (
+                <TextField
+                  fullWidth
+                  label="Wynik rzutów karnych"
+                  value={penaltyScore}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "" || /^[\d:]*$/.test(value)) {
+                      setPenaltyScore(value);
+                      setScoreDialogError("");
+                    }
+                  }}
+                  placeholder="np. 5:4"
+                  inputProps={{ inputMode: "numeric" }}
+                  sx={{ mb: 2 }}
+                  InputLabelProps={{ style: { color: "#ccc" } }}
+                />
+            )}
+
+
+
+            {isSetDiscipline(selectedTournamentForDetails?.discipline) && setScores.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ color: "#FF6A00", mb: 1 }}>
+                  Wyniki setów
+                </Typography>
+
+                {setScores.map((setScore, index) => (
+                  <TextField
+                    key={index}
+                    fullWidth
+                    label={`Set ${index + 1}`}
+                    value={setScore}
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (value === "" || /^[\d:]*$/.test(value)) {
+                        const updated = [...setScores];
+                        updated[index] = value;
+                        setSetScores(updated);
+                        setMatchNotes(updated.filter(Boolean).join(", "));
+                      }
+                    }}
+                    placeholder={
+                      normalizeDiscipline(selectedTournamentForDetails?.discipline) === "siatkówka"
+                        ? "np. 25:20"
+                        : "np. 6:4"
+                    }
+                    inputProps={{ inputMode: "numeric" }}
+                    sx={{ mb: 1 }}
+                    InputLabelProps={{ style: { color: "#ccc" } }}
+                  />
+                ))}
+              </Box>
+            )}
+
             {/* Checkbox dla notatek */}
-            <FormControlLabel
+            {!["siatkówka", "tenis ziemny", "tenis stołowy"].includes(
+              normalizeDiscipline(selectedTournamentForDetails?.discipline)
+            ) && (
+              <FormControlLabel
                 control={
-                    <Checkbox
-                        checked={showNotes}
-                        onChange={(e) => setShowNotes(e.target.checked)}
-                        sx={{ color: "#FF6A00", "&.Mui-checked": { color: "#FF6A00" } }}
-                    />
+                  <Checkbox
+                    checked={showNotes}
+                    onChange={(e) => setShowNotes(e.target.checked)}
+                    sx={{ color: "#FF6A00", "&.Mui-checked": { color: "#FF6A00" } }}
+                  />
                 }
                 label="Notes"
                 sx={{ mb: 2 }}
-            />
+              />
+            )}
             
             {/* Rozwijane pole tekstowe */}
-            {showNotes && (
+            {!["siatkówka", "tenis ziemny", "tenis stołowy"].includes(
+              normalizeDiscipline(selectedTournamentForDetails?.discipline)
+            ) && showNotes && (
                 <TextField
                     fullWidth
-                    label="Przebieg meczu"
+                    label={getScoreConfig(selectedTournamentForDetails?.discipline).detailsLabel}
                     multiline
                     rows={4}
                     value={matchNotes}
                     onChange={(e) => setMatchNotes(e.target.value)}
-                    placeholder=""
+                    placeholder={getScoreConfig(selectedTournamentForDetails?.discipline).detailsPlaceholder}
                     InputLabelProps={{ style: { color: "#ccc" } }}
                     sx={{
                         mb: 2,
