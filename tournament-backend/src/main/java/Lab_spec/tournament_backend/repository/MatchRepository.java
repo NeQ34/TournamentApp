@@ -7,4 +7,10 @@ import java.util.List;
 public interface MatchRepository extends JpaRepository<Match, Long> {
     List<Match> findByTournamentIdOrderByRoundNumberAscMatchOrderAsc(Long tournamentId);
     void deleteByTournamentId(Long tournamentId);
+
+    List<Match> findByRoundNumberOrderByMatchOrder(Integer roundNumber);
+
+    List<Match> findByTournamentIdAndRoundNumberOrderByMatchOrder(Long tournamentId, Integer roundNumber);
+
+    List<Match> findByNextMatchId(Long nextMatchId);
 }

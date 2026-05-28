@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Getter
 @Setter
@@ -53,5 +55,12 @@ public class Match {
     @Column(name = "next_match_id")
     private Long nextMatchId;   // ID meczu, do którego przechodzi zwycięzca
 
+    @Column(length = 2000)
+    private String notes;
 
+    @Column(name = "scheduled_time")
+    private LocalDateTime scheduledTime;
+
+    @Column(name = "court_number")
+    private Integer courtNumber;
 }

@@ -91,6 +91,7 @@ interface MembersDialogProps {
   onTeamUpdate: () => void;
 }
 
+
 // ========== KOMPONENT ZARZĄDZANIA CZŁONKAMI ==========
 const MembersManagementDialog = ({ open, onClose, team, onTeamUpdate }: MembersDialogProps) => {
   const [members, setMembers] = useState<Member[]>([]);

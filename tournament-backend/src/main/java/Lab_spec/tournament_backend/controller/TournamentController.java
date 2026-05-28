@@ -112,9 +112,9 @@ public class TournamentController {
 
     // Generowanie drabinki
     @PostMapping("/{id}/generate-bracket")
-    public ResponseEntity<?> generateBracket(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean randomize) {
+    public ResponseEntity<?> generateBracket(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean randomize, @RequestParam(defaultValue = "1") int numberOfCourts) {
         try {
-            bracketService.generateBracket(id, randomize);
+            bracketService.generateBracket(id, randomize, numberOfCourts);
             return ResponseEntity.ok(Map.of("message", "Drabinka została wygenerowana"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -129,6 +129,7 @@ public class TournamentController {
         List<Map<String, Object>> response = matches.stream().map(match -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", match.getId());
+            map.put("matchNumber", match.getMatchNumber());
             map.put("roundNumber", match.getRoundNumber());
             map.put("matchOrder", match.getMatchOrder());
             map.put("teamA", match.getTeamA() != null ? Map.of(
@@ -143,9 +144,9 @@ public class TournamentController {
             map.put("status", match.getStatus());
             map.put("winnerId", match.getWinner() != null ? match.getWinner().getId() : null);
             map.put("nextMatchId", match.getNextMatchId());
-            map.put("matchNumber", match.getMatchNumber());
-            map.put("sourceMatchAId", match.getSourceMatchAId());
-            map.put("sourceMatchBId", match.getSourceMatchBId());
+            map.put("notes", match.getNotes());
+            map.put("scheduledTime", match.getScheduledTime());
+            map.put("courtNumber", match.getCourtNumber());
             return map;
         }).collect(Collectors.toList());
 
@@ -159,8 +160,22 @@ public class TournamentController {
         try {
             String result = (String) body.get("result");
             Long winnerId = Long.valueOf(body.get("winnerId").toString());
-            bracketService.updateMatchResult(matchId, result, winnerId);
+            String notes = (String) body.get("notes"); // może być null
+
+            bracketService.updateMatchResult(matchId, result, winnerId, notes);
             return ResponseEntity.ok(Map.of("message", "Wynik zapisany"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/matches/{matchId}/time")
+    public ResponseEntity<?> updateMatchTime(@PathVariable Long matchId,
+                                             @RequestBody Map<String, String> body) {
+        try {
+            String scheduledTime = body.get("scheduledTime");
+            bracketService.updateMatchTime(matchId, scheduledTime);
+            return ResponseEntity.ok(Map.of("message", "Godzina zaktualizowana"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
