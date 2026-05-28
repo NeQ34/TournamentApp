@@ -69,6 +69,7 @@ const UserPanel = () => {
   const renderContent = () => {
     switch (selectedTab) {
       case "dashboard":
+          return <Dashboard role="user" userData={userData} />;
         return (
           <Paper
             elevation={8}

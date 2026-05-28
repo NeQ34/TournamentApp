@@ -40,6 +40,7 @@ import TeamsManagement from "../components/Admin/TeamsManagement";
 import DisciplinesManagement from "../components/Admin/DisciplinesManagement";
 import TournamentsManagement from "../components/Admin/TournamentsManagement";
 import ResultsView from "../components/Admin/ResultsView";
+import AdminDashboard from "../components/Admin/AdminDashboard";
 import ScheduleView from "../components/Admin/ScheduleView";
 
 const drawerWidth = 280;
@@ -98,14 +99,7 @@ const AdminPanel = () => {
     const renderContent = () => {
         switch (selectedTab) {
             case "dashboard":
-                return (
-                    <Paper elevation={8} sx={{ p: 4, borderRadius: 4, backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", color: "#fff" }}>
-                        <Typography variant="h4" fontWeight={700} gutterBottom>Panel administratora</Typography>
-                        <Typography variant="body1" sx={{ mt: 2, color: "rgba(255,255,255,0.7)" }}>
-                            Witaj, {userData.firstName} {userData.lastName}!
-                        </Typography>
-                    </Paper>
-                );
+                return <AdminDashboard role="admin" userData={userData} onNavigate={(tab: string) => setSelectedTab(tab)} />;;
             case "tournaments":
                 return <TournamentsManagement />;
             case "schedule":
