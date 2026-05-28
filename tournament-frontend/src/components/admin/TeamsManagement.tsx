@@ -1252,6 +1252,10 @@ useEffect(() => {
             open={openDialog}
             onClose={() => {
               setOpenDialog(false);
+
+              setSimilarDisciplines([]);
+              setIgnoreSimilarDisciplines(false);
+
               resetForm();
             }}
             maxWidth="sm"
@@ -1415,7 +1419,17 @@ useEffect(() => {
             </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setOpenDialog(false)} sx={{ color: "#ccc" }}>
+            <Button
+              onClick={() => {
+                setOpenDialog(false);
+
+                setSimilarDisciplines([]);
+                setIgnoreSimilarDisciplines(false);
+
+                resetForm();
+              }}
+              sx={{ color: "#ccc" }}
+            >
               Anuluj
             </Button>
             <Button
