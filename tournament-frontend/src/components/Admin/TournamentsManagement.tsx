@@ -1,5 +1,7 @@
 // src/components/admin/TournamentsManagement.tsx
-import { useEffect, useState } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import { useEffect, useState, useRef } from "react";
 import {
   Box,
   Button,
@@ -42,6 +44,7 @@ import {
   GroupAdd as GroupAddIcon,
   EmojiEvents as EmojiEventsIcon,
 } from "@mui/icons-material";
+import autoTable from "jspdf-autotable";
 
 interface Tournament {
   id: number;
@@ -137,6 +140,7 @@ const TournamentsManagement = () => {
   const [matchNotes, setMatchNotes] = useState("");
   const [setScores, setSetScores] = useState<string[]>([]);
   const [numberOfCourts, setNumberOfCourts] = useState(1);
+  const bracketContainerRef = useRef<HTMLDivElement>(null);
 
   // Filtrowanie
   const filterTournaments = (list: Tournament[]) => {
@@ -1012,6 +1016,92 @@ const TournamentsManagement = () => {
     return 'BYE';
   };
 
+  const handleExportBracketToPDF = () => {
+    if (!bracket.length) {
+        setDialogManageError("Brak drabinki do wyeksportowania.");
+        return;
+    }
+    
+    const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+    });
+    
+    // Tytuł
+    pdf.setFontSize(18);
+    pdf.setTextColor(255, 106, 0); // Pomarańczowy
+    pdf.text(`Drabinka turnieju: ${selectedTournamentForDetails?.name}`, 14, 20);
+    
+    pdf.setFontSize(10);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(`Wygenerowano: ${new Date().toLocaleString()}`, 14, 30);
+    
+    // Grupowanie meczów po rundach
+    const groupedByRound = bracket.reduce((acc, match) => {
+        if (!acc[match.roundNumber]) acc[match.roundNumber] = [];
+        acc[match.roundNumber].push(match);
+        return acc;
+    }, {} as Record<number, Match[]>);
+    
+    let yOffset = 40;
+    
+    // Dla każdej rundy
+    Object.entries(groupedByRound).forEach(([round, matches]) => {
+        const roundNum = parseInt(round);
+        
+        // Tytuł rundy
+        pdf.setFontSize(14);
+        pdf.setTextColor(255, 106, 0);
+        pdf.text(`${getRoundTitle(roundNum)}`, 14, yOffset);
+        yOffset += 8;
+        
+        // Przygotuj dane do tabeli
+        const tableData = matches.map(match => [
+            match.matchNumber?.toString() || "?",
+            `${match.teamA?.name || "BYE"} vs ${match.teamB?.name || "BYE"}`,
+            match.result || "-",
+            match.scheduledTime ? new Date(match.scheduledTime).toLocaleString() : "-",
+            match.courtNumber ? `Boisko ${match.courtNumber}` : "-",
+            match.winnerId ? "Rozegrany" : "Planowany"
+        ]);
+        
+        // Generuj tabelę
+        autoTable(pdf, {
+            startY: yOffset,
+            head: [["Mecz", "Drużyny", "Wynik", "Data/Godzina", "Boisko", "Status"]],
+            body: tableData,
+            theme: "grid",
+            headStyles: { fillColor: [255, 106, 0], textColor: [0, 0, 0], fontStyle: "bold" },
+            bodyStyles: { textColor: [0, 0, 0] },
+            alternateRowStyles: { fillColor: [240, 240, 240] },
+            margin: { left: 14, right: 14 },
+        });
+        
+        // Pobierz aktualną pozycję Y po tabeli
+        yOffset = (pdf as any).lastAutoTable.finalY + 15;
+        
+        // Sprawdź czy nie trzeba dodać nowej strony
+        if (yOffset > 250) {
+            pdf.addPage();
+            yOffset = 20;
+        }
+    });
+    
+    pdf.save(`drabinka_${selectedTournamentForDetails?.name || "turniej"}.pdf`);
+    setDialogManageSuccess("Drabinka została pobrana.");
+};
+
+  const getRoundTitle = (roundNumber: number): string => {
+    switch (roundNumber) {
+        case 1: return "1/8 FINAŁU";
+        case 2: return "ĆWIERĆFINAŁ";
+        case 3: return "PÓŁFINAŁ";
+        case 4: return "FINAŁ";
+        default: return `RUNDA ${roundNumber}`;
+    }
+  };
+
   const handleCloseScoreDialog = () => {
     setScoreDialogOpen(false);
     setSelectedMatch(null);
@@ -1471,6 +1561,24 @@ const TournamentsManagement = () => {
                 </Paper>
               )}
               
+               <div ref={bracketContainerRef} className="bracket-container">
+                {/* zawartość drabinki */}
+              </div>
+              {bracket.length > 0 && (
+              <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 2 }}>
+                  <Button
+                      variant="outlined"
+                      onClick={handleExportBracketToPDF}
+                      sx={{
+                          color: "#FF6A00",
+                          borderColor: "#FF6A00",
+                          "&:hover": { borderColor: "#cc5500", bgcolor: "rgba(255,106,0,0.1)" }
+                      }}
+                  >
+                      Pobierz drabinkę (PDF)
+                  </Button>
+              </Box>
+            )}
 
               {bracket.length > 0 && (
               <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
@@ -1482,7 +1590,11 @@ const TournamentsManagement = () => {
                               <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
                                   Runda {round}
                               </Typography>
-                              <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
+                            <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
+
+                            <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 2 }}>
+                              
+                            </Box>
                                   {roundMatches.map((match) => {
                                       const isLocked = isMatchLocked(match, bracket);
                                       

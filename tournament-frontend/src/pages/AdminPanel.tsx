@@ -42,6 +42,7 @@ import TournamentsManagement from "../components/Admin/TournamentsManagement";
 import ResultsView from "../components/Admin/ResultsView";
 import AdminDashboard from "../components/Admin/AdminDashboard";
 import ScheduleView from "../components/Admin/ScheduleView";
+import MyProfile from "../components/Admin/MyProfile";
 
 const drawerWidth = 280;
 
@@ -117,6 +118,8 @@ const AdminPanel = () => {
                 return <PlayersManagement userData={userData} />;
             case "results":
                 return <ResultsView />;
+            case "profile":
+                return <MyProfile />;
             case "disciplines":
               return (
                   <DisciplinesManagement

@@ -18,6 +18,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/players/**").permitAll()
+                        .requestMatchers("/api/admin/profile/**").permitAll()
                         .anyRequest().permitAll()
                 );
 
