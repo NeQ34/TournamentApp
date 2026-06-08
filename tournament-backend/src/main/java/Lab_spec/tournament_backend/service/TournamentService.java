@@ -23,19 +23,28 @@ public class TournamentService {
     private final TournamentTeamRepository tournamentTeamRepository;
     private final DisciplineService disciplineService;
     private final MatchRepository matchRepository;
+    private final SwissRoundRepository swissRoundRepository;
+    private final SwissPairingRepository swissPairingRepository;
+    private final SwissStandingRepository swissStandingRepository;
 
     public TournamentService(TournamentRepository tournamentRepository,
                              TeamRepository teamRepository,
                              DisciplineRepository disciplineRepository,
                              TournamentTeamRepository tournamentTeamRepository,
                              DisciplineService disciplineService,
-                             MatchRepository matchRepository) {
+                             MatchRepository matchRepository,
+                             SwissRoundRepository swissRoundRepository,
+                             SwissPairingRepository swissPairingRepository,
+                             SwissStandingRepository swissStandingRepository) {
         this.tournamentRepository = tournamentRepository;
         this.teamRepository = teamRepository;
         this.disciplineRepository = disciplineRepository;
         this.tournamentTeamRepository = tournamentTeamRepository;
         this.disciplineService = disciplineService;
         this.matchRepository = matchRepository;
+        this.swissRoundRepository = swissRoundRepository;                    // ← DODAJ
+        this.swissPairingRepository = swissPairingRepository;
+        this.swissStandingRepository = swissStandingRepository;
     }
 
     // Pobierz wszystkie turnieje
@@ -140,10 +149,23 @@ public class TournamentService {
         Tournament tournament = tournamentRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Turniej nie znaleziony"));
 
-        // Najpierw usuń wszystkie mecze powiązane z turniejem
+        // 1. Najpierw usuń pary (swiss_pairings) – one mają klucz obcy do swiss_rounds
+        swissPairingRepository.deleteByRoundTournamentId(id);
+
+        // 2. Potem usuń rundy (swiss_rounds) – one mają klucz obcy do tournaments
+        swissRoundRepository.deleteByTournamentId(id);
+
+        // 3. Następnie usuń standingi (swiss_standings) – one mają klucz obcy do tournaments
+        swissStandingRepository.deleteByTournamentId(id);
+
+        // 4. Usuń mecze pucharowe
         matchRepository.deleteByTournamentId(id);
 
-        // Potem usuń turniej
+        // 5. Usuń drużyny z turnieju (relacja wiele-do-wielu)
+        tournament.getTeams().clear();
+        tournamentRepository.save(tournament);
+
+        // 6. Na końcu usuń turniej
         tournamentRepository.delete(tournament);
     }
 

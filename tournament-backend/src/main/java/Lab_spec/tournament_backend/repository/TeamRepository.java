@@ -19,4 +19,9 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     boolean existsBySportIgnoreCase(String sport);
     List<Team> findByStatusAndSport(String status, String sport);
+
+    @Query(value = "SELECT t.* FROM teams t " +
+            "JOIN tournament_teams tt ON t.id = tt.team_id " +
+            "WHERE tt.tournament_id = :tournamentId", nativeQuery = true)
+    List<Team> findByTournamentId(@Param("tournamentId") Long tournamentId);
 }

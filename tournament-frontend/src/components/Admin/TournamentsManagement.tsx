@@ -35,6 +35,7 @@ import {
   ListItem,
   ListItemText,
   CircularProgress,
+  Grid,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -141,6 +142,18 @@ const TournamentsManagement = () => {
   const [setScores, setSetScores] = useState<string[]>([]);
   const [numberOfCourts, setNumberOfCourts] = useState(1);
   const bracketContainerRef = useRef<HTMLDivElement>(null);
+  const [bracketType, setBracketType] = useState<"elimination" | "swiss">("elimination");
+  const [swissRounds, setSwissRounds] = useState(5);
+  const [currentSwissRound, setCurrentSwissRound] = useState(1);
+  const [swissStandings, setSwissStandings] = useState<any[]>([]);
+  const [swissPairings, setSwissPairings] = useState<any[]>([]);
+  const [swissLoading, setSwissLoading] = useState(false);
+  const [swissInitialized, setSwissInitialized] = useState(false);
+  const [swissScoreDialogOpen, setSwissScoreDialogOpen] = useState(false);
+  const [selectedSwissPairing, setSelectedSwissPairing] = useState<any>(null);
+  const [swissScoreA, setSwissScoreA] = useState(0);
+  const [swissScoreB, setSwissScoreB] = useState(0);
+  const [swissGeneratingNext, setSwissGeneratingNext] = useState(false);
 
   // Filtrowanie
   const filterTournaments = (list: Tournament[]) => {
@@ -348,6 +361,189 @@ const TournamentsManagement = () => {
       main: base + " w czasie podstawowym",
       details: "",
     };
+  };
+
+  const initializeSwiss = async () => {
+    if (!selectedTournamentForDetails) return;
+    setSwissLoading(true);
+    try {
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/swiss/initialize?numberOfRounds=${swissRounds}&startHour=10`,
+            { 
+                method: "POST", 
+                headers: { 
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    "Content-Type": "application/json"
+                } 
+            }
+        );
+        if (response.ok) {
+            setSwissInitialized(true);
+            await fetchSwissStandings();
+            await fetchSwissPairings(1);
+            setDialogSuccess("System szwajcarski został zainicjalizowany.");
+        } else {
+            const error = await response.json();
+            setDialogError(error.message || "Błąd inicjalizacji systemu szwajcarskiego.");
+        }
+    } catch (error) {
+        console.error("Błąd inicjalizacji:", error);
+        setDialogError("Nie udało się połączyć z serwerem.");
+    } finally {
+        setSwissLoading(false);
+    }
+  };
+
+  const handleGenerateNextSwissRound = async () => {
+    if (!selectedTournamentForDetails) return;
+    setSwissGeneratingNext(true);
+    try {
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/swiss/generate-next-round`,
+            { 
+                method: "POST", 
+                headers: { 
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                    "Content-Type": "application/json"
+                } 
+            }
+        );
+        if (response.ok) {
+            const nextRound = currentSwissRound + 1;
+            setCurrentSwissRound(nextRound);
+            await fetchSwissPairings(nextRound);
+            await fetchSwissStandings();
+            setDialogSuccess(`Wygenerowano rundę ${nextRound}.`);
+        } else {
+            const error = await response.json();
+            setDialogError(error.message || "Błąd generowania rundy.");
+        }
+    } catch (error) {
+        console.error("Błąd:", error);
+        setDialogError("Nie udało się połączyć z serwerem.");
+    } finally {
+        setSwissGeneratingNext(false);
+    }
+  };
+
+  const fetchSwissStandings = async () => {
+    if (!selectedTournamentForDetails) return;
+    try {
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/swiss/standings`,
+            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+        if (response.ok) {
+            const data = await response.json();
+            setSwissStandings(data);
+        }
+    } catch (error) {
+        console.error("Błąd pobierania rankingu:", error);
+    }
+  };
+
+  const fetchSwissPairings = async (roundNumber: number) => {
+    if (!selectedTournamentForDetails) return;
+    try {
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/swiss/pairings/${roundNumber}`,
+            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        );
+        if (response.ok) {
+            const data = await response.json();
+            setSwissPairings(data);
+        }
+    } catch (error) {
+        console.error("Błąd pobierania par:", error);
+    }
+  };
+
+  const handleEditSwissScore = (pairing: any) => {
+    setSelectedSwissPairing(pairing);
+    // Jeśli mecz już ma wynik, wczytaj go
+    if (pairing.result && pairing.result.includes(":")) {
+        const [a, b] = pairing.result.split(":").map(Number);
+        setSwissScoreA(a);
+        setSwissScoreB(b);
+    } else {
+        setSwissScoreA(0);
+        setSwissScoreB(0);
+    }
+    setSwissScoreDialogOpen(true);
+  };
+
+  const handleSaveSwissScore = async () => {
+    if (!selectedSwissPairing) return;
+    
+    try {
+        const response = await fetch(
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails!.id}/swiss/pairings/${selectedSwissPairing.id}/result`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+                body: JSON.stringify({ 
+                    scoreA: swissScoreA, 
+                    scoreB: swissScoreB 
+                }),
+            }
+        );
+        
+        if (response.ok) {
+            // Po prostu odśwież wszystko
+            await fetchSwissStandings();
+            await fetchSwissPairings(currentSwissRound);
+            
+            // Zamknij dialog
+            setSwissScoreDialogOpen(false);
+            setSelectedSwissPairing(null);
+            setSwissScoreA(0);
+            setSwissScoreB(0);
+            setDialogSuccess("Wynik został zapisany.");
+            
+            // Sprawdź czy pojawiły się nowe pary w kolejnej rundzie (opcjonalnie)
+            // Możesz dodać małe opóźnienie i odświeżyć jeszcze raz
+            setTimeout(async () => {
+                await fetchSwissPairings(currentSwissRound);
+                // Sprawdź czy są jakieś pary w następnej rundzie
+                for (let i = currentSwissRound + 1; i <= swissRounds; i++) {
+                    const nextRoundResponse = await fetch(
+                        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails!.id}/swiss/pairings/${i}`,
+                        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+                    );
+                    if (nextRoundResponse.ok) {
+                        const nextRoundData = await nextRoundResponse.json();
+                        if (nextRoundData.length > 0) {
+                            setCurrentSwissRound(i);
+                            setSwissPairings(nextRoundData);
+                            setDialogSuccess(`Wynik zapisany. Wygenerowano rundę ${i}.`);
+                            break;
+                        }
+                    }
+                }
+            }, 500);
+        } else {
+            const error = await response.json();
+            setDialogError(error.message || "Błąd zapisu wyniku.");
+        }
+    } catch (error) {
+        console.error("Błąd zapisu wyniku:", error);
+        setDialogError("Nie udało się połączyć z serwerem.");
+    }
+  };
+
+  const handleCloseSwissScoreDialog = () => {
+    setSwissScoreDialogOpen(false);
+    setSelectedSwissPairing(null);
+    setSwissScoreA(0);
+    setSwissScoreB(0);
+  };
+
+  const isCurrentRoundCompleted = () => {
+    if (swissPairings.length === 0) return false;
+    return swissPairings.every(pairing => pairing.result !== null);
   };
 
   // ========== POBIERANIE DANYCH ==========
@@ -1515,246 +1711,411 @@ const TournamentsManagement = () => {
 
           {/* Zakładka: Drabinka */}
           {tabValue === 1 && (
-            <Box>
-              <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
-                <Button
-                  variant="contained"
-                  onClick={handleGenerateBracket}
-                  disabled={generating || bracket.length > 0}
-                  startIcon={generating ? <CircularProgress size={20} /> : <EmojiEventsIcon />}
-                  sx={{ bgcolor: "#FF6A00" }}
-                >
-                  {generating ? "Generowanie..." : "Generuj drabinkę"}
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() => setRandomize(!randomize)}
-                  disabled={bracket.length > 0}
-                  sx={{ color: randomize ? "#FF6A00" : "#fff", borderColor: "#FF6A00" }}
-                >
-                  Losuj pary: {randomize ? "TAK" : "NIE"}
-                </Button>
-                <TextField
-                  type="number"
-                  label="Liczba miejsc"
-                  value={numberOfCourts}
-                  disabled={bracket.length > 0}
-                  onChange={(e) => setNumberOfCourts(Math.max(1, parseInt(e.target.value) || 1))}
-                  size="small"
-                  sx={{
-                      width: 120,
-                      "& .MuiOutlinedInput-root": {
-                          color: "#fff",
-                          "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
-                      },
-                      "& .MuiInputLabel-root": { color: "#ccc" }
-                  }}
-                  InputLabelProps={{ shrink: true }}
-              />
-              </Box>
+              <Box>
+                  <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
+                      {/* Wybór formatu rozgrywek */}
+                      <FormControl sx={{ minWidth: 150 }} size="small">
+                          <InputLabel sx={{ color: "#ccc" }}>Format</InputLabel>
+                          <Select
+                              value={bracketType}
+                              onChange={(e) => setBracketType(e.target.value as "elimination" | "swiss")}
+                              label="Format"
+                              sx={{ color: "#fff", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" } }}
+                          >
+                              <MenuItem value="elimination">Pucharowy</MenuItem>
+                              <MenuItem value="swiss">Szwajcarski</MenuItem>
+                          </Select>
+                      </FormControl>
 
-              {bracketLoading && <Typography sx={{ textAlign: "center", py: 4 }}>Ładowanie drabinki...</Typography>}
+                      {/* Opcje dla systemu pucharowego */}
+                      {bracketType === "elimination" && (
+                          <>
+                              <Button
+                                  variant="contained"
+                                  onClick={handleGenerateBracket}
+                                  disabled={generating || bracket.length > 0}
+                                  startIcon={generating ? <CircularProgress size={20} /> : <EmojiEventsIcon />}
+                                  sx={{ bgcolor: "#FF6A00" }}
+                              >
+                                  {generating ? "Generowanie..." : "Generuj drabinkę"}
+                              </Button>
+                              <Button
+                                  variant="outlined"
+                                  onClick={() => setRandomize(!randomize)}
+                                  disabled={bracket.length > 0}
+                                  sx={{ color: randomize ? "#FF6A00" : "#fff", borderColor: "#FF6A00" }}
+                              >
+                                  Losuj pary: {randomize ? "TAK" : "NIE"}
+                              </Button>
+                              <TextField
+                                  type="number"
+                                  label="Liczba boisk"
+                                  value={numberOfCourts}
+                                  disabled={bracket.length > 0}
+                                  onChange={(e) => setNumberOfCourts(Math.max(1, parseInt(e.target.value) || 1))}
+                                  size="small"
+                                  sx={{
+                                      width: 120,
+                                      "& .MuiOutlinedInput-root": {
+                                          color: "#fff",
+                                          "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+                                      },
+                                      "& .MuiInputLabel-root": { color: "#ccc" }
+                                  }}
+                                  InputLabelProps={{ shrink: true }}
+                              />
+                          </>
+                      )}
 
-              {!bracketLoading && bracket.length === 0 && !generating && (
-                <Paper sx={{ p: 4, textAlign: "center", bgcolor: "rgba(0,0,0,0.5)" }}>
-                  <Typography>Drabinka nie została jeszcze wygenerowana. Kliknij przycisk powyżej.</Typography>
-                </Paper>
-              )}
-              
-               <div ref={bracketContainerRef} className="bracket-container">
-                {/* zawartość drabinki */}
-              </div>
-              {bracket.length > 0 && (
-              <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 2 }}>
-                  <Button
-                      variant="outlined"
-                      onClick={handleExportBracketToPDF}
-                      sx={{
-                          color: "#FF6A00",
-                          borderColor: "#FF6A00",
-                          "&:hover": { borderColor: "#cc5500", bgcolor: "rgba(255,106,0,0.1)" }
-                      }}
-                  >
-                      Pobierz drabinkę (PDF)
-                  </Button>
-              </Box>
-            )}
+                      {/* Opcje dla systemu szwajcarskiego */}
+                      {bracketType === "swiss" && (
+                          <>
+                              <TextField
+                                  type="number"
+                                  label="Liczba rund"
+                                  value={swissRounds}
+                                  onChange={(e) => setSwissRounds(Math.max(1, parseInt(e.target.value) || 1))}
+                                  size="small"
+                                  sx={{
+                                      width: 120,
+                                      "& .MuiOutlinedInput-root": {
+                                          color: "#fff",
+                                          "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+                                      },
+                                      "& .MuiInputLabel-root": { color: "#ccc" }
+                                  }}
+                                  InputLabelProps={{ shrink: true }}
+                              />
+                              <Button
+                                  variant="contained"
+                                  onClick={initializeSwiss}
+                                  disabled={swissInitialized}
+                                  startIcon={swissLoading ? <CircularProgress size={20} /> : <EmojiEventsIcon />}
+                                  sx={{ bgcolor: "#FF6A00" }}
+                              >
+                                  {swissLoading ? "Inicjalizowanie..." : "Inicjalizuj system szwajcarski"}
+                              </Button>
+                          </>
+                      )}
+                  </Box>
 
-              {bracket.length > 0 && (
-              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
-                  {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => {
-                      const roundMatches = bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder);
-                      
-                      return (
-                          <Box key={round} sx={{ width: "100%" }}>
-                              <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
-                                  Runda {round}
-                              </Typography>
-                            <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
+                  {/* WIDOK DLA SYSTEMU PUCHAROWEGO */}
+                  {bracketType === "elimination" && (
+                      <>
+                          {bracketLoading && <Typography sx={{ textAlign: "center", py: 4 }}>Ładowanie drabinki...</Typography>}
 
-                            <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 2 }}>
-                              
-                            </Box>
-                                  {roundMatches.map((match) => {
-                                      const isLocked = isMatchLocked(match, bracket);
+                          {!bracketLoading && bracket.length === 0 && !generating && (
+                              <Paper sx={{ p: 4, textAlign: "center", bgcolor: "rgba(0,0,0,0.5)" }}>
+                                  <Typography>Drabinka nie została jeszcze wygenerowana. Kliknij przycisk powyżej.</Typography>
+                              </Paper>
+                          )}
+
+                          {bracket.length > 0 && (
+                              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
+                                  {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => {
+                                      const roundMatches = bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder);
                                       
                                       return (
-                                          <Paper key={match.id} sx={{ p: 2, minWidth: 280, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative", opacity: isLocked ? 0.7 : 1 }}>
-                                          {/* Numer meczu */}
-                                          <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
-                                              Mecz #{match.matchNumber}
-                                          </Typography>
-
-                                          {/* Boisko */}
-                                          {match.courtNumber && (
-                                              <Typography 
-                                                  variant="caption" 
-                                                  sx={{ 
-                                                      position: "absolute", 
-                                                      top: 4, 
-                                                      left: 80, 
-                                                      color: "#FF6A00",
-                                                      fontWeight: "bold",
-                                                      fontSize: "0.7rem",
-                                                      bgcolor: "rgba(255,106,0,0.2)",
-                                                      px: 0.8,
-                                                      borderRadius: 1
-                                                  }}
-                                              >
-                                                  Boisko {match.courtNumber}
+                                          <Box key={round} sx={{ width: "100%" }}>
+                                              <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
+                                                  Runda {round}
                                               </Typography>
-                                          )}
-
-                                          <Typography 
-                                              variant="caption" 
-                                              sx={{ 
-                                                  position: "absolute", 
-                                                  top: 4, 
-                                                  right: 8, 
-                                                  color: match.scheduledTime ? "#4caf50" : "rgba(255,255,255,0.5)",
-                                                  fontWeight: match.scheduledTime ? "bold" : "normal",
-                                                  fontSize: "0.7rem"
-                                              }}
-                                          >
-                                              {formatMatchDateTime(match.scheduledTime)}
-                                          </Typography>
-                                          
-                                          {/* Przycisk edycji wyniku */}
-                                          <IconButton
-                                              size="small"
-                                              onClick={() => handleEditScore(match)}
-                                              disabled={isLocked}
-                                              sx={{
-                                                  position: "absolute",
-                                                  bottom: 4,
-                                                  right: 8,
-                                                  color: "#FF6A00",
-                                                  bgcolor: "rgba(0,0,0,0.5)",
-                                              }}
-                                          >
-                                              <EditIcon fontSize="small" />
-                                          </IconButton>
-                                          
-                                          <Box sx={{ mt: 2, mb: 1 }}>                                             
-                                              {match.result === "BYE" ? (
-                                                  <>
-                                                      <Typography sx={{ fontWeight: 700, fontSize: "1.1rem" }}>
-                                                          {match.teamA?.name || match.teamB?.name}
-                                                      </Typography>
-
-                                                      <Typography sx={{ color: "#FF6A00", mt: 1, fontWeight: "bold" }}>
-                                                          Wolny los — automatyczny awans
-                                                      </Typography>
-                                                  </>
-                                              ) : (
-                                                  <>
-                                                      <Typography sx={{ fontWeight: 500 }}>
-                                                          {getTeamDisplayName(match, 'A', bracket)}
-                                                      </Typography>
-
-                                                      <Typography variant="h6" sx={{ my: 1 }}>
-                                                          vs
-                                                      </Typography>
-
-                                                      <Typography sx={{ fontWeight: 500 }}>
-                                                          {getTeamDisplayName(match, 'B', bracket)}
-                                                      </Typography>
-
-                                                      {match.result && (() => {
-                                                        const display = getDisplayResult(
-                                                          match.result,
-                                                          selectedTournamentForDetails?.discipline
-                                                        );
-
-                                                        return (
-                                                          <>
-                                                            <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
-                                                              Wynik: {display.main}
-                                                            </Typography>
-
-                                                            {display.details && (
-                                                              <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", display: "block" }}>
-                                                                {display.details}
+                                              <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
+                                                  {roundMatches.map((match) => {
+                                                      const isLocked = isMatchLocked(match, bracket);
+                                                      
+                                                      return (
+                                                          <Paper key={match.id} sx={{ p: 2, minWidth: 280, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative", opacity: isLocked ? 0.7 : 1 }}>
+                                                              {/* Numer meczu */}
+                                                              <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
+                                                                  Mecz #{match.matchNumber}
                                                               </Typography>
-                                                            )}
-                                                          </>
-                                                        );
-                                                      })()}
-                                                      {match.winnerId && (
-                                                          <Typography
-                                                              variant="caption"
-                                                              sx={{
-                                                                  display: "block",
-                                                                  mt: 0.5,
-                                                                  color: "#FFD700",
-                                                                  fontWeight: "bold"
-                                                              }}
-                                                          >
-                                                              Wygrany: {
-                                                                  match.teamA?.id === match.winnerId
-                                                                      ? match.teamA?.name
-                                                                      : match.teamB?.name
-                                                              }
+
+                                                              {/* Boisko */}
+                                                              {match.courtNumber && (
+                                                                  <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 80, color: "#FF6A00", fontWeight: "bold", fontSize: "0.7rem", bgcolor: "rgba(255,106,0,0.2)", px: 0.8, borderRadius: 1 }}>
+                                                                      Boisko {match.courtNumber}
+                                                                  </Typography>
+                                                              )}
+
+                                                              {/* Data i godzina */}
+                                                              <Typography variant="caption" sx={{ position: "absolute", top: 4, right: 8, color: match.scheduledTime ? "#4caf50" : "rgba(255,255,255,0.5)", fontWeight: match.scheduledTime ? "bold" : "normal", fontSize: "0.7rem" }}>
+                                                                  {formatMatchDateTime(match.scheduledTime)}
+                                                              </Typography>
+                                                              
+                                                              {/* Przycisk edycji wyniku */}
+                                                              <IconButton
+                                                                  size="small"
+                                                                  onClick={() => handleEditScore(match)}
+                                                                  disabled={isLocked}
+                                                                  sx={{ position: "absolute", bottom: 4, right: 8, color: "#FF6A00", bgcolor: "rgba(0,0,0,0.5)" }}
+                                                              >
+                                                                  <EditIcon fontSize="small" />
+                                                              </IconButton>
+                                                              
+                                                              <Box sx={{ mt: 2, mb: 1 }}>                                             
+                                                                  {match.result === "BYE" ? (
+                                                                      <>
+                                                                          <Typography sx={{ fontWeight: 700, fontSize: "1.1rem" }}>
+                                                                              {match.teamA?.name || match.teamB?.name}
+                                                                          </Typography>
+                                                                          <Typography sx={{ color: "#FF6A00", mt: 1, fontWeight: "bold" }}>
+                                                                              Wolny los — automatyczny awans
+                                                                          </Typography>
+                                                                      </>
+                                                                  ) : (
+                                                                      <>
+                                                                          <Typography sx={{ fontWeight: 500 }}>
+                                                                              {getTeamDisplayName(match, 'A', bracket)}
+                                                                          </Typography>
+                                                                          <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
+                                                                          <Typography sx={{ fontWeight: 500 }}>
+                                                                              {getTeamDisplayName(match, 'B', bracket)}
+                                                                          </Typography>
+                                                                          {match.result && (() => {
+                                                                              const display = getDisplayResult(match.result, selectedTournamentForDetails?.discipline);
+                                                                              return (
+                                                                                  <>
+                                                                                      <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
+                                                                                          Wynik: {display.main}
+                                                                                      </Typography>
+                                                                                      {display.details && (
+                                                                                          <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", display: "block" }}>
+                                                                                              {display.details}
+                                                                                          </Typography>
+                                                                                      )}
+                                                                                  </>
+                                                                              );
+                                                                          })()}
+                                                                          {match.winnerId && (
+                                                                              <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: "#FFD700", fontWeight: "bold" }}>
+                                                                                  Wygrany: {match.teamA?.id === match.winnerId ? match.teamA?.name : match.teamB?.name}
+                                                                              </Typography>
+                                                                          )}
+                                                                      </>
+                                                                  )}
+                                                                  
+                                                                  {match.notes && (
+                                                                      <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", mt: 0.5, display: "block" }}>
+                                                                          📝 {match.notes.length > 30 ? match.notes.substring(0, 30) + "..." : match.notes}
+                                                                      </Typography>
+                                                                  )}
+                                                                  
+                                                                  {match.status === "pending" && match.teamA && match.teamB && !match.result && !isLocked && (
+                                                                      <Button size="small" variant="outlined" onClick={() => handleEditScore(match)} sx={{ mt: 1, color: "#FF6A00" }}>
+                                                                          Wprowadź wynik
+                                                                      </Button>
+                                                                  )}
+                                                                  
+                                                                  {isLocked && (
+                                                                      <Chip label="Zablokowany (awans)" size="small" sx={{ mt: 1, bgcolor: "#ff9800", color: "#fff" }} />
+                                                                  )}
+                                                                  
+                                                                  {match.winnerId && !isLocked && (
+                                                                      <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
+                                                                  )}
+                                                              </Box>
+                                                          </Paper>
+                                                      );
+                                                  })}
+                                              </Box>
+                                          </Box>
+                                      );
+                                  })}
+                              </Box>
+                          )}
+
+                          {bracket.length > 0 && (
+                              <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 2 }}>
+                                  <Button
+                                      variant="outlined"
+                                      onClick={handleExportBracketToPDF}
+                                      sx={{ color: "#FF6A00", borderColor: "#FF6A00", "&:hover": { borderColor: "#cc5500", bgcolor: "rgba(255,106,0,0.1)" } }}
+                                  >
+                                      Pobierz drabinkę (PDF)
+                                  </Button>
+                              </Box>
+                          )}
+                      </>
+                  )}
+
+                  {/* WIDOK DLA SYSTEMU SZWAJCARSKIEGO */}
+                  {bracketType === "swiss" && swissStandings.length > 0 && (
+                      <Box>
+                          {/* Ranking */}
+                          <Typography variant="h6" sx={{ color: "#FF6A00", mt: 3, mb: 2 }}>Ranking</Typography>
+                          <TableContainer component={Paper} sx={{ bgcolor: "rgba(0,0,0,0.7)", mb: 3, borderRadius: 2 }}>
+                              <Table size="small">
+                                  <TableHead>
+                                      <TableRow sx={{ bgcolor: "rgba(255,106,0,0.2)" }}>
+                                          <TableCell sx={{ color: "#FF6A00", fontWeight: "bold" }}>Miejsce</TableCell>
+                                          <TableCell sx={{ color: "#FF6A00", fontWeight: "bold" }}>Drużyna</TableCell>
+                                          <TableCell sx={{ color: "#FF6A00", fontWeight: "bold" }}>Punkty</TableCell>
+                                          <TableCell sx={{ color: "#FF6A00", fontWeight: "bold" }}>W</TableCell>
+                                          <TableCell sx={{ color: "#FF6A00", fontWeight: "bold" }}>R</TableCell>
+                                          <TableCell sx={{ color: "#FF6A00", fontWeight: "bold" }}>P</TableCell>
+                                      </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                      {swissStandings.map((standing, idx) => (
+                                          <TableRow key={standing.id} sx={{ "&:hover": { bgcolor: "rgba(255,255,255,0.05)" } }}>
+                                              <TableCell sx={{ color: "#fff" }}>{idx + 1}</TableCell>
+                                              <TableCell sx={{ color: "#fff", fontWeight: 500 }}>{standing.team?.name}</TableCell>
+                                              <TableCell sx={{ color: "#FF6A00", fontWeight: "bold" }}>{standing.points}</TableCell>
+                                              <TableCell sx={{ color: "#4caf50" }}>{standing.wins}</TableCell>
+                                              <TableCell sx={{ color: "#ff9800" }}>{standing.draws}</TableCell>
+                                              <TableCell sx={{ color: "#f44336" }}>{standing.losses}</TableCell>
+                                          </TableRow>
+                                      ))}
+                                  </TableBody>
+                              </Table>
+                          </TableContainer>
+
+                          {/* Przycisk do generowania następnej rundy */}
+                          {currentSwissRound < swissRounds && isCurrentRoundCompleted() && (
+                            <Button
+                                variant="contained"
+                                onClick={handleGenerateNextSwissRound}
+                                disabled={swissGeneratingNext}
+                                sx={{ bgcolor: "#FF6A00", ml: 2 }}
+                            >
+                                {swissGeneratingNext ? "Generowanie..." : "Generuj następną rundę"}
+                            </Button>
+                        )}
+
+                          {/* Nawigacja po rundach */}
+                          <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
+                              {Array.from({ length: swissRounds }, (_, i) => i + 1).map(round => (
+                                  <Chip
+                                      key={round}
+                                      label={`Runda ${round}`}
+                                      onClick={() => {
+                                          setCurrentSwissRound(round);
+                                          fetchSwissPairings(round);
+                                      }}
+                                      sx={{
+                                          bgcolor: currentSwissRound === round ? "#FF6A00" : "rgba(255,255,255,0.1)",
+                                          color: currentSwissRound === round ? "#000" : "#fff",
+                                          cursor: "pointer",
+                                          "&:hover": { bgcolor: currentSwissRound === round ? "#FF6A00" : "rgba(255,255,255,0.2)" }
+                                      }}
+                                  />
+                              ))}
+
+                              <Dialog 
+                              open={swissScoreDialogOpen} 
+                              onClose={handleCloseSwissScoreDialog} 
+                              maxWidth="sm" 
+                              fullWidth
+                              PaperProps={{ sx: { bgcolor: "rgba(0,0,0,0.9)", color: "#fff", borderRadius: 4 } }}
+                          >
+                              <DialogTitle>Wprowadź wynik</DialogTitle>
+                              <DialogContent>
+                                  <Typography sx={{ mb: 2, fontWeight: "bold", textAlign: "center" }}>
+                                      {selectedSwissPairing?.teamA?.name} vs {selectedSwissPairing?.teamB?.name}
+                                  </Typography>
+                                  
+                                  <Box sx={{ display: "flex", gap: 2, alignItems: "center", justifyContent: "center", mb: 2 }}>
+                                      <TextField
+                                          type="number"
+                                          label={selectedSwissPairing?.teamA?.name}
+                                          value={swissScoreA}
+                                          onChange={(e) => setSwissScoreA(parseInt(e.target.value) || 0)}
+                                          sx={{ 
+                                              flex: 1,
+                                              "& .MuiOutlinedInput-root": { color: "#fff" },
+                                              "& .MuiInputLabel-root": { color: "#ccc" }
+                                          }}
+                                          InputLabelProps={{ shrink: true }}
+                                          autoFocus
+                                      />
+                                      <Typography variant="h4" sx={{ color: "#FF6A00" }}>:</Typography>
+                                      <TextField
+                                          type="number"
+                                          label={selectedSwissPairing?.teamB?.name}
+                                          value={swissScoreB}
+                                          onChange={(e) => setSwissScoreB(parseInt(e.target.value) || 0)}
+                                          sx={{ 
+                                              flex: 1,
+                                              "& .MuiOutlinedInput-root": { color: "#fff" },
+                                              "& .MuiInputLabel-root": { color: "#ccc" }
+                                          }}
+                                          InputLabelProps={{ shrink: true }}
+                                      />
+                                  </Box>
+                                  
+                                    <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.5)", display: "block", textAlign: "center" }}>
+                                        Wprowadź liczbę punktów/ goli dla każdej drużyny.
+                                        {selectedSwissPairing?.isDraw !== undefined && " Remis jest dozwolony."}
+                                    </Typography>
+                                </DialogContent>
+                                <DialogActions>
+                                    <Button onClick={handleCloseSwissScoreDialog} sx={{ color: "#ccc" }}>
+                                        Anuluj
+                                    </Button>
+                                    <Button 
+                                        onClick={handleSaveSwissScore} 
+                                        variant="contained" 
+                                        sx={{ bgcolor: "#FF6A00", "&:hover": { bgcolor: "#cc5500" } }}
+                                    >
+                                        Zapisz
+                                    </Button>
+                                </DialogActions>
+                            </Dialog>
+                          </Box>
+
+                          {/* Pary w wybranej rundzie */}
+                          <Typography variant="h6" sx={{ color: "#FF6A00", mb: 2 }}>Runda {currentSwissRound}</Typography>
+                          <Grid container spacing={2}>
+                              {swissPairings.length === 0 ? (
+                                  <Grid item xs={12}>
+                                      <Paper sx={{ p: 3, textAlign: "center", bgcolor: "rgba(0,0,0,0.5)" }}>
+                                          <Typography>Brak par w tej rundzie lub runda jeszcze nie wygenerowana.</Typography>
+                                      </Paper>
+                                  </Grid>
+                              ) : (
+                                  swissPairings.map(pairing => (
+                                      <Grid item xs={12} md={6} key={pairing.id}>
+                                          <Paper sx={{ p: 2, bgcolor: "rgba(0,0,0,0.7)", borderRadius: 2, border: "1px solid rgba(255,106,0,0.2)" }}>
+                                              <Typography sx={{ fontWeight: "bold", fontSize: "1rem" }}>
+                                                  {pairing.teamA?.name} vs {pairing.teamB?.name}
+                                              </Typography>
+                                              {pairing.result ? (
+                                                  <>
+                                                      <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
+                                                          Wynik: {pairing.result}
+                                                      </Typography>
+                                                      {pairing.winner && (
+                                                          <Typography variant="caption" sx={{ color: "#FFD700", display: "block" }}>
+                                                              Zwycięzca: {pairing.winner.name}
                                                           </Typography>
                                                       )}
                                                   </>
-                                              )}
-                                              
-                                              {match.notes && (
-                                                  <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", mt: 0.5, display: "block" }}>
-                                                      📝 {match.notes.length > 30 ? match.notes.substring(0, 30) + "..." : match.notes}
-                                                  </Typography>
-                                              )}
-                                              
-                                              {match.status === "pending" && match.teamA && match.teamB && !match.result && !isLocked && (
+                                              ) : (
                                                   <Button
                                                       size="small"
                                                       variant="outlined"
-                                                      onClick={() => handleEditScore(match)}
-                                                      sx={{ mt: 1, color: "#FF6A00" }}
+                                                      onClick={() => handleEditSwissScore(pairing)}
+                                                      sx={{ mt: 1, color: "#FF6A00", borderColor: "#FF6A00" }}
                                                   >
                                                       Wprowadź wynik
                                                   </Button>
                                               )}
-                                              
-                                              {isLocked && (
-                                                  <Chip label="Zablokowany (awans)" size="small" sx={{ mt: 1, bgcolor: "#ff9800", color: "#fff" }} />
-                                              )}
-                                              
-                                              {match.winnerId && !isLocked && (
-                                                  <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
-                                              )}
-                                          </Box>
-                                      </Paper>
-                                      );
-                                  })}
-                              </Box>
-                          </Box>
-                      );
-                  })}
+                                          </Paper>
+                                      </Grid>
+                                  ))
+                              )}
+                          </Grid>
+                      </Box>
+                  )}
+
+                  {/* Komunikat gdy system szwajcarski nie został zainicjalizowany */}
+                  {bracketType === "swiss" && swissStandings.length === 0 && !swissLoading && (
+                      <Paper sx={{ p: 4, textAlign: "center", bgcolor: "rgba(0,0,0,0.5)", mt: 2 }}>
+                          <Typography>System szwajcarski nie został jeszcze zainicjalizowany. Ustaw liczbę rund i kliknij "Inicjalizuj".</Typography>
+                      </Paper>
+                  )}
               </Box>
-          )}
-            </Box>
           )}
 
           {/* Zakładka: Wyniki */}
