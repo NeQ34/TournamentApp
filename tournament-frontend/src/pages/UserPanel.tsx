@@ -27,6 +27,7 @@ import {
   Person as ProfileIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
+  Dashboard,
 } from "@mui/icons-material";
 import backgroundImage from "../photos/img2.jpg";
 import Teams from "../components/User/Teams";

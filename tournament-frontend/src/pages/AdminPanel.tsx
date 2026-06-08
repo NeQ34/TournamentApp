@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
+import Grid3x3Icon from "@mui/icons-material/Grid3x3";
 import {
     Box,
     Drawer,
@@ -43,6 +44,7 @@ import ResultsView from "../components/Admin/ResultsView";
 import AdminDashboard from "../components/Admin/AdminDashboard";
 import ScheduleView from "../components/Admin/ScheduleView";
 import MyProfile from "../components/Admin/MyProfile";
+import BracketsView from "./BracketsView";
 
 const drawerWidth = 280;
 
@@ -120,6 +122,8 @@ const AdminPanel = () => {
                 return <ResultsView />;
             case "profile":
                 return <MyProfile />;
+            case "brackets":
+                return <BracketsView />;
             case "disciplines":
               return (
                   <DisciplinesManagement
