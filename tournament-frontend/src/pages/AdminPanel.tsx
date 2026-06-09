@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect, useMemo } from "react";
-import Grid3x3Icon from "@mui/icons-material/Grid3x3";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import ReportsView from "../components/Admin/ReportsView";
 import {
     Box,
     Drawer,
@@ -103,11 +103,14 @@ const AdminPanel = () => {
     const renderContent = () => {
         switch (selectedTab) {
             case "dashboard":
-                return <AdminDashboard role="admin" userData={userData} onNavigate={(tab: string) => setSelectedTab(tab)} />;;
+                return <AdminDashboard role="admin" userData={userData} onNavigate={(tab: string) => setSelectedTab(tab)} />;
+
             case "tournaments":
                 return <TournamentsManagement />;
             case "schedule":
                 return <ScheduleView />;
+            case "reports":
+                return <ReportsView />;
             case "teams":
                 return (
                     <TeamsManagement
@@ -212,7 +215,7 @@ const AdminPanel = () => {
             </Box>
 
             <Box component="main" sx={{ flexGrow: 1, p: 3, mt: "64px" }}>
-                <Container maxWidth="xl">
+                <Container maxWidth={false} sx={{ px: { xs: 2, md: 5 } }}>
                     {renderContent()}
                 </Container>
             </Box>
