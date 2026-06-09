@@ -834,7 +834,7 @@ const TournamentsManagement = () => {
             setDialogSuccess("Drabinka została wygenerowana.");
         } else {
             const error = await response.json();
-            setDialogError(error.message || "Błąd generowania drabinki");
+            setDialogManageSuccess(error.message || "Błąd generowania drabinki");
         }
     } catch (error) {
         console.error("Błąd:", error);
