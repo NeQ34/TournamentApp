@@ -97,7 +97,7 @@ const ReportsView = () => {
             <Grid container spacing={4} alignItems="stretch">
                 {/* ROZKŁAD DYSCYPLIN - FULL WIDTH */}
                 <Grid item xs={12} lg={4}>
-                    <Paper sx={{ height: "100%", display: "flex", flexDirection: "column", p: 5, bgcolor: "rgba(13,13,13,0.9)", borderRadius: 7, border: "1px solid rgba(255,106,0,0.15)" }}>
+                    <Paper sx={{ height: "100%", display: "flex", flexDirection: "column", p: 5, bgcolor: "rgba(13,13,13,0.9)", borderRadius: 7, border: "1px solid rgba(255,106,0,0.15)" , minHeight: 500 }}>
                         <Typography variant="h5" fontWeight={900} sx={{ mb: 2 }}>ROZKŁAD DYSCYPLIN W SYSTEMIE</Typography>
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
