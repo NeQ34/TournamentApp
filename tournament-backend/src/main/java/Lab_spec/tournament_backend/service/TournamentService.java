@@ -253,6 +253,7 @@ public class TournamentService {
         response.setStatus(calculateTournamentStatus(tournament));
         response.setMaxTeams(tournament.getMaxTeams());
         response.setRegisteredTeamsCount(tournament.getTeams() != null ? tournament.getTeams().size() : 0);
+        response.setBracketType(tournament.getBracketType());
         return response;
     }
 

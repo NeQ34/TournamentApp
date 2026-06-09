@@ -14,6 +14,16 @@ public class TournamentResponse {
     private Integer maxTeams;
     private Integer registeredTeamsCount;
 
+    public String getBracketType() {
+        return bracketType;
+    }
+
+    public void setBracketType(String bracketType) {
+        this.bracketType = bracketType;
+    }
+
+    private String bracketType;
+
     // Getters i Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

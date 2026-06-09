@@ -42,6 +42,9 @@ public class Tournament {
     @Column(name = "max_teams")
     private Integer maxTeams;
 
+    @Column(name = "bracket_type")
+    private String bracketType = "auto"; // "auto" lub "manual"
+
     @ManyToMany
     @JoinTable(
             name = "tournament_teams",

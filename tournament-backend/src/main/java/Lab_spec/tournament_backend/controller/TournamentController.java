@@ -180,4 +180,37 @@ public class TournamentController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
+
+    @PostMapping("/{id}/generate-empty-bracket")
+    public ResponseEntity<?> generateEmptyBracket(@PathVariable Long id,
+                                                  @RequestParam(defaultValue = "1") int numberOfCourts) {
+        try {
+            bracketService.generateEmptyBracket(id, numberOfCourts);
+            return ResponseEntity.ok(Map.of("message", "Pusta drabinka została wygenerowana"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // W TournamentController.java
+    @PutMapping("/matches/{matchId}/teams")
+    public ResponseEntity<?> updateMatchTeams(@PathVariable Long matchId,
+                                              @RequestBody Map<String, Object> body) {
+        try {
+            Long teamAId = null;
+            Long teamBId = null;
+
+            if (body.containsKey("teamAId") && body.get("teamAId") != null) {
+                teamAId = Long.valueOf(body.get("teamAId").toString());
+            }
+            if (body.containsKey("teamBId") && body.get("teamBId") != null) {
+                teamBId = Long.valueOf(body.get("teamBId").toString());
+            }
+
+            bracketService.updateMatchTeams(matchId, teamAId, teamBId);
+            return ResponseEntity.ok(Map.of("message", "Drużyny zaktualizowane"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 }

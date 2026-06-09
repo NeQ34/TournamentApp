@@ -370,4 +370,120 @@ public class BracketService {
     private int calculateMatchDuration(Match match) {
         return DEFAULT_MATCH_DURATION;
     }
+
+    @Transactional
+    public void generateEmptyBracket(Long tournamentId, int numberOfCourts) {
+        Tournament tournament = tournamentRepository.findById(tournamentId)
+                .orElseThrow(() -> new RuntimeException("Turniej nie znaleziony"));
+
+        List<Team> teams = new ArrayList<>(tournament.getTeams());
+        int teamsCount = teams.size();
+
+        if (teamsCount < 2) {
+            throw new RuntimeException("Za mało drużyn do wygenerowania drabinki (minimum 2)");
+        }
+
+        // Usuń istniejące mecze
+        matchRepository.deleteByTournamentId(tournamentId);
+
+        // Oblicz strukturę drabinki
+        int nextPowerOfTwo = 1;
+        while (nextPowerOfTwo < teamsCount) {
+            nextPowerOfTwo <<= 1;
+        }
+
+        List<Match> allMatches = new ArrayList<>();
+        List<Match> currentRound = new ArrayList<>();
+        int matchCounter = 1;
+
+        // Runda 1 - puste mecze
+        for (int i = 0; i < nextPowerOfTwo / 2; i++) {
+            Match match = new Match();
+            match.setTournament(tournament);
+            match.setTeamA(null);
+            match.setTeamB(null);
+            match.setRoundNumber(1);
+            match.setMatchOrder(i);
+            match.setStatus("pending");
+            match.setMatchNumber(matchCounter++);
+            currentRound.add(match);
+        }
+
+        allMatches.addAll(currentRound);
+
+        // Kolejne rundy
+        int round = 2;
+        while (currentRound.size() > 1) {
+            List<Match> nextRound = new ArrayList<>();
+            for (int i = 0; i < currentRound.size() / 2; i++) {
+                Match match = new Match();
+                match.setTournament(tournament);
+                match.setRoundNumber(round);
+                match.setMatchOrder(i);
+                match.setStatus("pending");
+                match.setMatchNumber(matchCounter++);
+                nextRound.add(match);
+            }
+            allMatches.addAll(nextRound);
+            currentRound = nextRound;
+            round++;
+        }
+
+        matchRepository.saveAll(allMatches);
+
+        // Połącz mecze (nextMatchId)
+        int matchesPerRound = nextPowerOfTwo / 2;
+        int startIndex = 0;
+        int totalRounds = (int)(Math.log(nextPowerOfTwo) / Math.log(2));
+
+        for (int r = 1; r <= totalRounds; r++) {
+            int currentRoundMatches = matchesPerRound;
+            int nextRoundMatches = matchesPerRound / 2;
+
+            if (nextRoundMatches == 0) break;
+
+            int currentStart = startIndex;
+            int nextStart = startIndex + currentRoundMatches;
+
+            for (int i = 0; i < nextRoundMatches; i++) {
+                Match nextMatch = allMatches.get(nextStart + i);
+                Match sourceMatch1 = allMatches.get(currentStart + i * 2);
+                sourceMatch1.setNextMatchId(nextMatch.getId());
+                Match sourceMatch2 = allMatches.get(currentStart + i * 2 + 1);
+                sourceMatch2.setNextMatchId(nextMatch.getId());
+                matchRepository.save(sourceMatch1);
+                matchRepository.save(sourceMatch2);
+            }
+
+            startIndex += currentRoundMatches;
+            matchesPerRound = nextRoundMatches;
+        }
+
+        // Ustaw czasy i boiska
+        LocalDateTime startTime = tournament.getStartDate() != null
+                ? tournament.getStartDate().atTime(10, 0)
+                : LocalDateTime.now().withHour(10).withMinute(0);
+
+        recalculateTimesWithCourts(allMatches.get(0).getId(), startTime, numberOfCourts);
+    }
+
+    @Transactional
+    public void updateMatchTeams(Long matchId, Long teamAId, Long teamBId) {
+        Match match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new RuntimeException("Mecz nie znaleziony"));
+
+        if (teamAId != null) {
+            Team teamA = teamRepository.findById(teamAId)
+                    .orElseThrow(() -> new RuntimeException("Drużyna A nie znaleziona"));
+            match.setTeamA(teamA);
+        }
+
+        if (teamBId != null) {
+            Team teamB = teamRepository.findById(teamBId)
+                    .orElseThrow(() -> new RuntimeException("Drużyna B nie znaleziona"));
+            match.setTeamB(teamB);
+        }
+
+        matchRepository.save(match);
+    }
 }
