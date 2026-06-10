@@ -483,7 +483,17 @@ public class BracketService {
                 ? tournament.getStartDate().atTime(10, 0)
                 : LocalDateTime.now().withHour(10).withMinute(0);
 
-        recalculateTimesWithCourts(allMatches.get(0).getId(), startTime, numberOfCourts);
+        if (!allMatches.isEmpty()) {
+            Match firstMatch = allMatches.get(0);
+
+            recalculateTimesWithCourts(
+                    firstMatch.getId(),
+                    startTime,
+                    1,
+                    DEFAULT_MATCH_DURATION,
+                    BREAK_BETWEEN_MATCHES
+            );
+        }
     }
 
     @Transactional
