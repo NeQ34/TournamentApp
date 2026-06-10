@@ -37,6 +37,8 @@ import {
   ListItemText,
   CircularProgress,
   Grid,
+  Card,
+  CardContent,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -2026,143 +2028,161 @@ const TournamentsManagement = () => {
                   </Box>
 
                   {/* WIDOK DLA SYSTEMU PUCHAROWEGO */}
+                  {/* ========== TRYB PUCHAROWY AUTOMATYCZNY ========== */}
                   {bracketType === "elimination" && (
-                      <>
-                          {bracketLoading && <Typography sx={{ textAlign: "center", py: 4 }}>Ładowanie drabinki...</Typography>}
+                      <Box>
+                          {bracketLoading && (
+                              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                                  <CircularProgress sx={{ color: "#FF6A00" }} />
+                              </Box>
+                          )}
 
                           {!bracketLoading && bracket.length === 0 && !generating && (
-                              <Paper sx={{ p: 4, textAlign: "center", bgcolor: "rgba(0,0,0,0.5)" }}>
-                                  <Typography>Drabinka nie została jeszcze wygenerowana. Kliknij przycisk powyżej.</Typography>
+                              <Paper sx={{ p: 4, textAlign: "center", bgcolor: "rgba(0,0,0,0.5)", borderRadius: 2 }}>
+                                  <Typography>Drabinka nie została jeszcze wygenerowana. Kliknij przycisk "Generuj drabinkę".</Typography>
                               </Paper>
                           )}
 
                           {bracket.length > 0 && (
-                              <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, overflowX: "auto", py: 2 }}>
-                                  {Array.from(new Set(bracket.map(m => m.roundNumber))).sort((a, b) => a - b).map(round => {
-                                      const roundMatches = bracket.filter(m => m.roundNumber === round).sort((a, b) => a.matchOrder - b.matchOrder);
-                                      
-                                      return (
-                                          <Box key={round} sx={{ width: "100%" }}>
-                                              <Typography variant="h6" sx={{ textAlign: "center", mb: 1, color: "#FF6A00" }}>
-                                                  Runda {round}
-                                              </Typography>
-                                              <Box sx={{ display: "flex", justifyContent: "center", gap: 3, flexWrap: "wrap" }}>
-                                                  {roundMatches.map((match) => {
-                                                      const isLocked = isMatchLocked(match, bracket);
+                              <Box>
+                                  {/* Header z informacjami */}
+                                  <Paper sx={{ p: 2, mb: 3, bgcolor: "rgba(0,0,0,0.5)", borderRadius: 2 }}>
+                                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+                                          <Typography sx={{ color: "#FF6A00", fontWeight: "bold" }}>
+                                              Drabinka turnieju - system pucharowy
+                                          </Typography>
+                                          <Button
+                                              size="small"
+                                              variant="outlined"
+                                              onClick={handleExportBracketToPDF}
+                                              sx={{ color: "#FF6A00", borderColor: "#FF6A00" }}
+                                          >
+                                              Pobierz PDF
+                                          </Button>
+                                      </Box>
+                                  </Paper>
+
+                                  {/* Drabinka - KAFELKI jak w trybie ręcznym */}
+                                  <Box sx={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                      {(() => {
+                                          const groupedByRound: Record<number, Match[]> = {};
+                                          bracket.forEach((match: Match) => {
+                                              if (!groupedByRound[match.roundNumber]) groupedByRound[match.roundNumber] = [];
+                                              groupedByRound[match.roundNumber].push(match);
+                                          });
+                                          
+                                          const roundNumbers = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
+                                          const totalRounds = roundNumbers.length;
+                                          
+                                          return roundNumbers.map((roundNum) => {
+                                              const matches = groupedByRound[roundNum];
+                                              
+                                              let roundTitle = "";
+                                              if (totalRounds === 1) roundTitle = "FINAŁ";
+                                              else if (totalRounds === 2) {
+                                                  roundTitle = roundNum === 1 ? "PÓŁFINAŁ" : "FINAŁ";
+                                              } else if (totalRounds === 3) {
+                                                  if (roundNum === 1) roundTitle = "ĆWIERĆFINAŁ";
+                                                  else if (roundNum === 2) roundTitle = "PÓŁFINAŁ";
+                                                  else roundTitle = "FINAŁ";
+                                              } else if (totalRounds === 4) {
+                                                  if (roundNum === 1) roundTitle = "1/8 FINAŁU";
+                                                  else if (roundNum === 2) roundTitle = "ĆWIERĆFINAŁ";
+                                                  else if (roundNum === 3) roundTitle = "PÓŁFINAŁ";
+                                                  else roundTitle = "FINAŁ";
+                                              } else {
+                                                  roundTitle = `RUNDA ${roundNum}`;
+                                              }
+                                              
+                                              return (
+                                                  <Paper key={roundNum} sx={{ p: 2, bgcolor: "rgba(0,0,0,0.4)", borderRadius: 2 }}>
+                                                      <Typography 
+                                                          sx={{ 
+                                                              textAlign: "center", 
+                                                              mb: 2, 
+                                                              color: "#FF6A00", 
+                                                              fontWeight: "bold",
+                                                              bgcolor: "rgba(255,106,0,0.1)",
+                                                              py: 1,
+                                                              borderRadius: 2,
+                                                          }}
+                                                      >
+                                                          {roundTitle}
+                                                      </Typography>
                                                       
-                                                      return (
-                                                          <Paper key={match.id} sx={{ p: 2, minWidth: 280, textAlign: "center", bgcolor: "rgba(0,0,0,0.6)", position: "relative", opacity: isLocked ? 0.7 : 1 }}>
-                                                              {/* Numer meczu */}
-                                                              <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 8, color: "#FF6A00", fontWeight: "bold" }}>
-                                                                  Mecz #{match.matchNumber}
-                                                              </Typography>
-
-                                                              {/* Boisko */}
-                                                              {match.courtNumber && (
-                                                                  <Typography variant="caption" sx={{ position: "absolute", top: 4, left: 80, color: "#FF6A00", fontWeight: "bold", fontSize: "0.7rem", bgcolor: "rgba(255,106,0,0.2)", px: 0.8, borderRadius: 1 }}>
-                                                                      Boisko {match.courtNumber}
-                                                                  </Typography>
-                                                              )}
-
-                                                              {/* Data i godzina */}
-                                                              <Typography variant="caption" sx={{ position: "absolute", top: 4, right: 8, color: match.scheduledTime ? "#4caf50" : "rgba(255,255,255,0.5)", fontWeight: match.scheduledTime ? "bold" : "normal", fontSize: "0.7rem" }}>
-                                                                  {formatMatchDateTime(match.scheduledTime)}
-                                                              </Typography>
-                                                              
-                                                              {/* Przycisk edycji wyniku */}
-                                                              <IconButton
-                                                                  size="small"
+                                                      {/* KAFELKI MECZÓW - POZIOMO */}
+                                                      <Box sx={{ 
+                                                          display: "flex", 
+                                                          flexDirection: "row", 
+                                                          flexWrap: "wrap", 
+                                                          justifyContent: "center",
+                                                          gap: 2 
+                                                      }}>
+                                                          {matches.map((match: Match) => (
+                                                              <Card 
+                                                                  key={match.id} 
+                                                                  sx={{ 
+                                                                      bgcolor: "rgba(0,0,0,0.6)", 
+                                                                      border: "1px solid rgba(255,106,0,0.3)",
+                                                                      cursor: "pointer",
+                                                                      transition: "0.2s",
+                                                                      width: 280,
+                                                                      flexShrink: 0,
+                                                                      "&:hover": { borderColor: "#FF6A00", transform: "translateY(-5px)" },
+                                                                  }}
                                                                   onClick={() => handleEditScore(match)}
-                                                                  disabled={isLocked}
-                                                                  sx={{ position: "absolute", bottom: 4, right: 8, color: "#FF6A00", bgcolor: "rgba(0,0,0,0.5)" }}
                                                               >
-                                                                  <EditIcon fontSize="small" />
-                                                              </IconButton>
-                                                              
-                                                              <Box sx={{ mt: 2, mb: 1 }}>                                             
-                                                                  {match.result === "BYE" ? (
-                                                                      <>
-                                                                          <Typography sx={{ fontWeight: 700, fontSize: "1.1rem" }}>
-                                                                              {match.teamA?.name || match.teamB?.name}
+                                                                  <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+                                                                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                                                                          <Typography variant="caption" sx={{ color: "#FF6A00" }}>
+                                                                              Mecz {match.matchNumber}
                                                                           </Typography>
-                                                                          <Typography sx={{ color: "#FF6A00", mt: 1, fontWeight: "bold" }}>
-                                                                              Wolny los — automatyczny awans
-                                                                          </Typography>
-                                                                      </>
-                                                                  ) : (
-                                                                      <>
-                                                                          <Typography sx={{ fontWeight: 500 }}>
-                                                                              {getTeamDisplayName(match, 'A', bracket)}
-                                                                          </Typography>
-                                                                          <Typography variant="h6" sx={{ my: 1 }}>vs</Typography>
-                                                                          <Typography sx={{ fontWeight: 500 }}>
-                                                                              {getTeamDisplayName(match, 'B', bracket)}
-                                                                          </Typography>
-                                                                          {match.result && (() => {
-                                                                              const display = getDisplayResult(match.result, selectedTournamentForDetails?.discipline);
-                                                                              return (
-                                                                                  <>
-                                                                                      <Typography sx={{ color: "#4caf50", mt: 1, fontWeight: "bold" }}>
-                                                                                          Wynik: {display.main}
-                                                                                      </Typography>
-                                                                                      {display.details && (
-                                                                                          <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", display: "block" }}>
-                                                                                              {display.details}
-                                                                                          </Typography>
-                                                                                      )}
-                                                                                  </>
-                                                                              );
-                                                                          })()}
-                                                                          {match.winnerId && (
-                                                                              <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: "#FFD700", fontWeight: "bold" }}>
-                                                                                  Wygrany: {match.teamA?.id === match.winnerId ? match.teamA?.name : match.teamB?.name}
+                                                                          {match.courtNumber && (
+                                                                              <Typography variant="caption" sx={{ color: "#aaa" }}>
+                                                                                  Boisko {match.courtNumber}
                                                                               </Typography>
                                                                           )}
-                                                                      </>
-                                                                  )}
-                                                                  
-                                                                  {match.notes && (
-                                                                      <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", mt: 0.5, display: "block" }}>
-                                                                          📝 {match.notes.length > 30 ? match.notes.substring(0, 30) + "..." : match.notes}
-                                                                      </Typography>
-                                                                  )}
-                                                                  
-                                                                  {match.status === "pending" && match.teamA && match.teamB && !match.result && !isLocked && (
-                                                                      <Button size="small" variant="outlined" onClick={() => handleEditScore(match)} sx={{ mt: 1, color: "#FF6A00" }}>
-                                                                          Wprowadź wynik
-                                                                      </Button>
-                                                                  )}
-                                                                  
-                                                                  {isLocked && (
-                                                                      <Chip label="Zablokowany (awans)" size="small" sx={{ mt: 1, bgcolor: "#ff9800", color: "#fff" }} />
-                                                                  )}
-                                                                  
-                                                                  {match.winnerId && !isLocked && (
-                                                                      <Chip label="Rozegrany" size="small" sx={{ mt: 1, bgcolor: "#4caf50", color: "#fff" }} />
-                                                                  )}
-                                                              </Box>
-                                                          </Paper>
-                                                      );
-                                                  })}
-                                              </Box>
-                                          </Box>
-                                      );
-                                  })}
+                                                                      </Box>
+                                                                      
+                                                                      <Box sx={{ textAlign: "center", py: 1 }}>
+                                                                          <Typography sx={{ fontWeight: "bold", fontSize: "0.9rem", color: match.winnerId === match.teamA?.id ? "#FFD700" : "#fff" }}>
+                                                                              {match.teamA?.name || "BYE"}
+                                                                          </Typography>
+                                                                          <Typography variant="body2" sx={{ my: 0.5, color: "#FF6A00" }}>VS</Typography>
+                                                                          <Typography sx={{ fontWeight: "bold", fontSize: "0.9rem", color: match.winnerId === match.teamB?.id ? "#FFD700" : "#fff" }}>
+                                                                              {match.teamB?.name || "BYE"}
+                                                                          </Typography>
+                                                                      </Box>
+                                                                      
+                                                                      {match.scheduledTime && (
+                                                                          <Typography variant="caption" sx={{ display: "block", textAlign: "center", color: "#4caf50" }}>
+                                                                              {formatMatchDateTime(match.scheduledTime)}
+                                                                          </Typography>
+                                                                      )}
+                                                                      
+                                                                      {match.result && match.result !== "BYE" && (
+                                                                          <Typography sx={{ color: "#4caf50", textAlign: "center", fontWeight: "bold", fontSize: "0.85rem", mt: 0.5 }}>
+                                                                              Wynik: {match.result}
+                                                                          </Typography>
+                                                                      )}
+                                                                      
+                                                                      {match.result === "BYE" && (
+                                                                          <Typography sx={{ color: "#FF6A00", textAlign: "center", fontSize: "0.7rem", mt: 0.5 }}>
+                                                                              Wolny los - automatyczny awans
+                                                                          </Typography>
+                                                                      )}
+                                                                  </CardContent>
+                                                              </Card>
+                                                          ))}
+                                                      </Box>
+                                                  </Paper>
+                                              );
+                                          });
+                                      })()}
+                                  </Box>
                               </Box>
                           )}
-
-                          {bracket.length > 0 && (
-                              <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 2 }}>
-                                  <Button
-                                      variant="outlined"
-                                      onClick={handleExportBracketToPDF}
-                                      sx={{ color: "#FF6A00", borderColor: "#FF6A00", "&:hover": { borderColor: "#cc5500", bgcolor: "rgba(255,106,0,0.1)" } }}
-                                  >
-                                      Pobierz drabinkę (PDF)
-                                  </Button>
-                              </Box>
-                          )}
-                      </>
+                      </Box>
                   )}
 
                   {/* WIDOK DLA SYSTEMU SZWAJCARSKIEGO */}

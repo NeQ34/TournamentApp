@@ -16,6 +16,7 @@ import {
   Divider,
   Container,
   Paper,
+  CircularProgress,
 } from "@mui/material";
 import {
   Dashboard as DashboardIcon,
@@ -27,10 +28,19 @@ import {
   Person as ProfileIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
-  Dashboard,
+  Schedule as ScheduleIcon,
+  Scoreboard as ResultsIcon,
 } from "@mui/icons-material";
 import backgroundImage from "../photos/img2.jpg";
-import Teams from "../components/User/Teams";
+
+// Import komponentów dla użytkownika
+import UserDashboard from "../components/Admin/AdminDashboard";
+import ScheduleView from "../components/Admin/ScheduleView";
+import BracketView from "../pages/BracketsView";
+import ResultsView from "../components/Admin/ResultsView";
+import UserTeams from "../components/User/Teams";
+import MyProfile from "../components/Admin/MyProfile";
+import UserTournaments from "./UserTournaments";
 
 const drawerWidth = 280;
 
@@ -41,7 +51,6 @@ const UserPanel = () => {
 
   const userDataRaw = localStorage.getItem("user");
   const userData = userDataRaw ? JSON.parse(userDataRaw) : null;
-
 
   if (!userData) {
     navigate("/login");
@@ -54,134 +63,44 @@ const UserPanel = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("user");
+    localStorage.removeItem("token");
     navigate("/login");
   };
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: <DashboardIcon /> },
     { id: "tournaments", label: "Turnieje", icon: <TournamentIcon /> },
-    { id: "brackets", label: "Drabinki i tabele", icon: <BracketIcon /> },
-    { id: "calendar", label: "Kalendarz", icon: <CalendarIcon /> },
+    { id: "brackets", label: "Drabinki", icon: <BracketIcon /> },
+    { id: "schedule", label: "Terminarz", icon: <ScheduleIcon /> },
+    { id: "results", label: "Wyniki", icon: <ResultsIcon /> },
     { id: "teams", label: "Drużyny", icon: <TeamsIcon /> },
-    { id: "archive", label: "Archiwum", icon: <ArchiveIcon /> },
     { id: "profile", label: "Mój profil", icon: <ProfileIcon /> },
   ];
 
   const renderContent = () => {
     switch (selectedTab) {
       case "dashboard":
-          return <Dashboard role="user" userData={userData} />;
-        return (
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              backgroundColor: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-              color: "#fff",
-            }}
-          >
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              Witaj, {userData.firstName} {userData.lastName}!
-            </Typography>
-          </Paper>
-        );
+        return <UserDashboard userData={userData} />;
       case "tournaments":
-        return (
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              backgroundColor: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-              color: "#fff",
-            }}
-          >
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              Turnieje
-            </Typography>
-          </Paper>
-        );
+        return <UserTournaments userData={userData} />;
       case "brackets":
-        return (
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              backgroundColor: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-              color: "#fff",
-            }}
-          >
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              Drabinki i tabele
-            </Typography>
-          </Paper>
-        );
-      case "calendar":
-        return (
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              backgroundColor: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-              color: "#fff",
-            }}
-          >
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              Kalendarz
-            </Typography>
-          </Paper>
-        );
+        return <BracketView/>;
+      case "schedule":
+        return <ScheduleView/>;
+      case "results":
+        return <ResultsView/>;
       case "teams":
-        return <Teams userData={userData} />;
-      case "archive":
-        return (
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              backgroundColor: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-              color: "#fff",
-            }}
-          >
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              Archiwum
-            </Typography>
-          </Paper>
-        );
+        return <UserTeams userData={userData} />;
       case "profile":
-        return (
-          <Paper
-            elevation={8}
-            sx={{
-              p: 4,
-              borderRadius: 4,
-              backgroundColor: "rgba(0,0,0,0.7)",
-              backdropFilter: "blur(6px)",
-              color: "#fff",
-            }}
-          >
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              Mój profil
-            </Typography>
-          </Paper>
-        );
+        return <MyProfile/>;
+
       default:
-        return null;
+        return <UserDashboard userData={userData} />;
     }
   };
 
   const drawer = (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {}
       <Box sx={{ p: 3, textAlign: "center" }}>
         <Typography
           variant="h5"
@@ -200,7 +119,6 @@ const UserPanel = () => {
 
       <Divider sx={{ bgcolor: "rgba(255,255,255,0.1)" }} />
 
-      {}
       <List sx={{ flex: 1, px: 2 }}>
         {menuItems.map((item) => (
           <ListItemButton
@@ -238,7 +156,6 @@ const UserPanel = () => {
 
       <Divider sx={{ bgcolor: "rgba(255,255,255,0.1)" }} />
 
-      {}
       <Box sx={{ p: 2 }}>
         <ListItemButton
           onClick={handleLogout}
@@ -269,7 +186,6 @@ const UserPanel = () => {
         backgroundRepeat: "no-repeat",
       }}
     >
-      {}
       <AppBar
         position="fixed"
         sx={{
@@ -294,7 +210,6 @@ const UserPanel = () => {
 
           <Box sx={{ flexGrow: 1 }} />
 
-          {}
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Typography variant="body1" sx={{ color: "#fff" }}>
               {userData.firstName} {userData.lastName}
@@ -312,11 +227,7 @@ const UserPanel = () => {
         </Toolbar>
       </AppBar>
 
-      {}
-      <Box
-        component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-      >
+      <Box component="nav" sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -354,7 +265,6 @@ const UserPanel = () => {
         </Drawer>
       </Box>
 
-      {}
       <Box
         component="main"
         sx={{
