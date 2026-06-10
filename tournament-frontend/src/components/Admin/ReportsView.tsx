@@ -71,7 +71,7 @@ const ReportsView = () => {
             {/* KAFELKI STATYSTYK GÓRNYCH */}
             <Grid container spacing={3} sx={{ mb: 5 }} alignItems="stretch">
                 {statsCards.map((card, i) => (
-                    <Grid key={i} item xs={12} md={4} sx={{ display: 'flex' }}>
+                    <Grid key={i} item xs={12} sm={6} md={4} sx={{ display: 'flex' }}>
                         <Paper sx={{
                             p: 4,
                             borderRadius: 5,
@@ -96,7 +96,7 @@ const ReportsView = () => {
             </Grid>
             <Grid container spacing={4} alignItems="stretch">
                 {/* ROZKŁAD DYSCYPLIN - FULL WIDTH */}
-                <Grid item xs={12} lg={4}>
+                <Grid item xs={12} md={5} lg={4}>
                     <Paper sx={{ height: "100%", display: "flex", flexDirection: "column", p: 5, bgcolor: "rgba(13,13,13,0.9)", borderRadius: 7, border: "1px solid rgba(255,106,0,0.15)" , minHeight: 500 }}>
                         <Typography variant="h5" fontWeight={900} sx={{ mb: 2 }}>ROZKŁAD DYSCYPLIN W SYSTEMIE</Typography>
                         <ResponsiveContainer width="100%" height="100%">
@@ -119,10 +119,11 @@ const ReportsView = () => {
                 </Grid>
 
                 {/* ANALIZA DRUŻYNY - FULL WIDTH */}
-                <Grid item xs={12} lg={8.5}>
+                <Grid item xs={12} md={7} lg={8}>
                     <Paper sx={{ height: "100%", display: "flex", flexDirection: "column", p: 5, bgcolor: "rgba(13,13,13,0.9)",
                         borderRadius: 7, border: "1px solid rgba(255,106,0,0.15)" }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+                        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, justifyContent: 'space-between',
+                            alignItems: { xs: 'flex-start', md: 'center' }, mb: 4 }}>
                             <Typography variant="h5" fontWeight={900}>SZCZEGÓŁOWA ANALIZA WYDAJNOŚCI</Typography>
                             <Box sx={{ display: 'flex', gap: 2, flexGrow: 1, flexWrap: 'wrap' }}>
                                 <FormControl fullWidth>

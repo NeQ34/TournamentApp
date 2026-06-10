@@ -112,9 +112,28 @@ public class TournamentController {
 
     // Generowanie drabinki
     @PostMapping("/{id}/generate-bracket")
-    public ResponseEntity<?> generateBracket(@PathVariable Long id, @RequestParam(defaultValue = "false") boolean randomize, @RequestParam(defaultValue = "1") int numberOfCourts) {
+    public ResponseEntity<?> generateBracket(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean randomize,
+            @RequestParam(defaultValue = "1") int numberOfCourts,
+            @RequestParam(defaultValue = "10") int startHour,
+            @RequestParam(defaultValue = "90") int matchDuration,
+            @RequestParam(defaultValue = "15") int breakBetweenMatches
+    ) {
         try {
-            bracketService.generateBracket(id, randomize, numberOfCourts);
+            System.out.println("START HOUR = " + startHour);
+            System.out.println("MATCH DURATION = " + matchDuration);
+            System.out.println("BREAK = " + breakBetweenMatches);
+
+            bracketService.generateBracket(
+                    id,
+                    randomize,
+                    numberOfCourts,
+                    startHour,
+                    matchDuration,
+                    breakBetweenMatches
+            );
+
             return ResponseEntity.ok(Map.of("message", "Drabinka została wygenerowana"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));

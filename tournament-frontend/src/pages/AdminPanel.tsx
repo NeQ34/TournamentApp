@@ -46,6 +46,7 @@ import ScheduleView from "../components/Admin/ScheduleView";
 import MyProfile from "../components/Admin/MyProfile";
 import BracketsView from "./BracketsView";
 import ArchiveView from "../components/Admin/ArchiveView";
+import SettingsView from "../components/Admin/SettingsView";
 
 const drawerWidth = 280;
 
@@ -130,6 +131,8 @@ const AdminPanel = () => {
                 return <BracketsView />;
             case "archive":
                 return <ArchiveView />;
+            case "settings":
+                return <SettingsView />;
             case "disciplines":
               return (
                   <DisciplinesManagement
@@ -215,7 +218,7 @@ const AdminPanel = () => {
             </Box>
 
             <Box component="main" sx={{ flexGrow: 1, p: 3, mt: "64px" }}>
-                <Container maxWidth={false} sx={{ px: { xs: 2, md: 5 } }}>
+                <Container maxWidth={false} sx={{ px: { xs: 2, md: 5 }, maxWidth: '100% !important' }}>
                     {renderContent()}
                 </Container>
             </Box>
