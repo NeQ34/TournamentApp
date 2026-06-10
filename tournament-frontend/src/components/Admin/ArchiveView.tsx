@@ -403,6 +403,9 @@ const ArchiveView = () => {
 
                     {/* Okno Wybierz dyscyplinę */}
                     <Grid size={{ xs: 12, md: 4 }}>
+
+                    <Grid item xs={12} md={4}>
+
                         <FormControl fullWidth size="small">
                             <InputLabel sx={{ color: "#ccc" }}>Dyscyplina</InputLabel>
                             <Select
