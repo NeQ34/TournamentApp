@@ -35,7 +35,14 @@ public class BracketService {
     }
 
     @Transactional
-    public void generateBracket(Long tournamentId, boolean randomize, int numberOfCourts) {
+    public void generateBracket(
+            Long tournamentId,
+            boolean randomize,
+            int numberOfCourts,
+            int startHour,
+            int matchDuration,
+            int breakBetweenMatches
+    ) {
         Tournament tournament = tournamentRepository.findById(tournamentId)
                 .orElseThrow(() -> new RuntimeException("Turniej nie znaleziony"));
 
@@ -181,8 +188,8 @@ public class BracketService {
         allMatches = matchRepository.saveAll(allMatches);
 
         LocalDateTime startTime = tournament.getStartDate() != null
-                ? tournament.getStartDate().atTime(10, 0)
-                : LocalDateTime.now().withHour(10).withMinute(0);
+                ? tournament.getStartDate().atTime(startHour, 0)
+                : LocalDateTime.now().withHour(startHour).withMinute(0);
 
         if (!allMatches.isEmpty()) {
             Match firstMatch = allMatches.stream()
@@ -190,11 +197,23 @@ public class BracketService {
                     .findFirst()
                     .orElse(allMatches.get(0));
 
-            recalculateTimesWithCourts(firstMatch.getId(), startTime, numberOfCourts);
+            recalculateTimesWithCourts(
+                    firstMatch.getId(),
+                    startTime,
+                    numberOfCourts,
+                    matchDuration,
+                    breakBetweenMatches
+            );
         }
     }
 
-    private void recalculateTimesWithCourts(Long startMatchId, LocalDateTime startTime, int numberOfCourts) {
+    private void recalculateTimesWithCourts(
+            Long startMatchId,
+            LocalDateTime startTime,
+            int numberOfCourts,
+            int matchDuration,
+            int breakBetweenMatches
+    ) {
         Match firstMatch = matchRepository.findById(startMatchId).orElse(null);
         if (firstMatch == null) return;
 
@@ -226,7 +245,7 @@ public class BracketService {
                 }
                 // Przejdź do następnego slotu czasowego
                 if (matchIndex < matchesInRound.size()) {
-                    currentTime = currentTime.plusMinutes(DEFAULT_MATCH_DURATION + BREAK_BETWEEN_MATCHES_SAME_COURT);
+                    currentTime = currentTime.plusMinutes(matchDuration + breakBetweenMatches);
                 }
             }
 
@@ -464,7 +483,17 @@ public class BracketService {
                 ? tournament.getStartDate().atTime(10, 0)
                 : LocalDateTime.now().withHour(10).withMinute(0);
 
-        recalculateTimesWithCourts(allMatches.get(0).getId(), startTime, numberOfCourts);
+        if (!allMatches.isEmpty()) {
+            Match firstMatch = allMatches.get(0);
+
+            recalculateTimesWithCourts(
+                    firstMatch.getId(),
+                    startTime,
+                    1,
+                    DEFAULT_MATCH_DURATION,
+                    BREAK_BETWEEN_MATCHES
+            );
+        }
     }
 
     @Transactional

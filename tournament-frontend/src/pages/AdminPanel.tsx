@@ -46,6 +46,7 @@ import ScheduleView from "../components/Admin/ScheduleView";
 import MyProfile from "../components/Admin/MyProfile";
 import BracketsView from "./BracketsView";
 import ArchiveView from "../components/Admin/ArchiveView";
+import SettingsView from "../components/Admin/SettingsView";
 
 const drawerWidth = 280;
 
@@ -130,6 +131,8 @@ const AdminPanel = () => {
                 return <BracketsView />;
             case "archive":
                 return <ArchiveView />;
+            case "settings":
+                return <SettingsView />;
             case "disciplines":
               return (
                   <DisciplinesManagement
