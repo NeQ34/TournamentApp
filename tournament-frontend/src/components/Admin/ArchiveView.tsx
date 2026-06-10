@@ -343,7 +343,7 @@ const ArchiveView = () => {
                             sx={{ input: { color: "#fff" } }}
                         />
                     </Grid>
-                    <Grid item xs={12} md={3}>
+                    <Grid item xs={12} md={4}>
                         <FormControl fullWidth size="small">
                             <InputLabel sx={{ color: "#ccc" }}>Dyscyplina</InputLabel>
                             <Select

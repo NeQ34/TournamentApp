@@ -1213,6 +1213,17 @@ const TournamentsManagement = () => {
     return 'BYE';
   };
 
+  const removePolishChars = (text: string): string => {
+    if (!text) return "";
+    
+    const polishChars: { [key: string]: string } = {
+        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+        'Ą': 'A', 'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N', 'Ó': 'O', 'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z'
+    };
+    
+    return text.replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, char => polishChars[char] || char);
+  };
+
   const handleExportBracketToPDF = () => {
     if (!bracket.length) {
         setDialogManageError("Brak drabinki do wyeksportowania.");
@@ -1220,74 +1231,179 @@ const TournamentsManagement = () => {
     }
     
     const pdf = new jsPDF({
-        orientation: "landscape",
+        orientation: "landscape", // landscape - więcej miejsca na szerokość
         unit: "mm",
         format: "a4",
     });
     
-    // Tytuł
+    // Pomocnicza funkcja do zamiany polskich znaków
+    const removePolishChars = (text: string): string => {
+        if (!text) return "";
+        const polishChars: { [key: string]: string } = {
+            'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+            'Ą': 'A', 'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N', 'Ó': 'O', 'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z'
+        };
+        return text.replace(/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g, char => polishChars[char] || char);
+    };
+    
+    // Pobierz liczbę drużyn
+    const teamsCount = selectedTournamentForDetails?.registeredTeamsCount || 0;
+    
+    // ========== NAGŁÓWEK ==========
     pdf.setFontSize(18);
-    pdf.setTextColor(255, 106, 0); // Pomarańczowy
-    pdf.text(`Drabinka turnieju: ${selectedTournamentForDetails?.name}`, 14, 20);
+    pdf.setTextColor(255, 106, 0);
+    pdf.setFont("helvetica", "bold");
+    pdf.text(removePolishChars(selectedTournamentForDetails?.name || "DRABINKA TURNIEJU"), 148, 20, { align: "center" });
     
-    pdf.setFontSize(10);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text(`Wygenerowano: ${new Date().toLocaleString()}`, 14, 30);
+    pdf.setDrawColor(255, 106, 0);
+    pdf.setLineWidth(0.5);
+    pdf.line(15, 27, 282, 27);
     
-    // Grupowanie meczów po rundach
+    pdf.setFontSize(9);
+    pdf.setTextColor(80, 80, 80);
+    pdf.setFont("helvetica", "normal");
+    pdf.text(`Dyscyplina: ${removePolishChars(selectedTournamentForDetails?.discipline || "-")}`, 15, 38);
+    pdf.text(`Data turnieju: ${selectedTournamentForDetails?.startDate || "-"}`, 15, 45);
+    pdf.text(`Liczba druzyn: ${teamsCount}`, 15, 52);
+    pdf.text(`Liczba meczow: ${bracket.length}`, 15, 59);
+    pdf.text(`Wygenerowano: ${new Date().toLocaleString()}`, 15, 66);
+    
+    // ========== GRUPOWANIE MECZÓW ==========
     const groupedByRound = bracket.reduce((acc, match) => {
         if (!acc[match.roundNumber]) acc[match.roundNumber] = [];
         acc[match.roundNumber].push(match);
         return acc;
     }, {} as Record<number, Match[]>);
     
-    let yOffset = 40;
+    let yOffset = 80;
+    const roundNumbers = Object.keys(groupedByRound).map(Number).sort((a, b) => a - b);
+    const totalRounds = roundNumbers.length;
     
-    // Dla każdej rundy
-    Object.entries(groupedByRound).forEach(([round, matches]) => {
-        const roundNum = parseInt(round);
+    // ========== DLA KAŻDEJ RUNDY ==========
+    for (const roundNum of roundNumbers) {
+        const matches = groupedByRound[roundNum];
         
-        // Tytuł rundy
-        pdf.setFontSize(14);
+        if (yOffset > 180) {
+            pdf.addPage();
+            yOffset = 25;
+        }
+        
+        // ========== TYTUŁ RUNDY ==========
+        pdf.setFontSize(13);
         pdf.setTextColor(255, 106, 0);
-        pdf.text(`${getRoundTitle(roundNum)}`, 14, yOffset);
-        yOffset += 8;
+        pdf.setFont("helvetica", "bold");
         
-        // Przygotuj dane do tabeli
-        const tableData = matches.map(match => [
-            match.matchNumber?.toString() || "?",
-            `${match.teamA?.name || "BYE"} vs ${match.teamB?.name || "BYE"}`,
-            match.result || "-",
-            match.scheduledTime ? new Date(match.scheduledTime).toLocaleString() : "-",
-            match.courtNumber ? `Boisko ${match.courtNumber}` : "-",
-            match.winnerId ? "Rozegrany" : "Planowany"
-        ]);
+        let roundTitle = "";
+        if (totalRounds === 1) roundTitle = "FINAŁ";
+        else if (totalRounds === 2) {
+            roundTitle = roundNum === 1 ? "PÓŁFINAŁ" : "FINAŁ";
+        } else if (totalRounds === 3) {
+            if (roundNum === 1) roundTitle = "ĆWIERĆFINAŁ";
+            else if (roundNum === 2) roundTitle = "PÓŁFINAŁ";
+            else roundTitle = "FINAŁ";
+        } else if (totalRounds === 4) {
+            if (roundNum === 1) roundTitle = "1/8 FINAŁU";
+            else if (roundNum === 2) roundTitle = "ĆWIERĆFINAŁ";
+            else if (roundNum === 3) roundTitle = "PÓŁFINAŁ";
+            else roundTitle = "FINAŁ";
+        } else {
+            roundTitle = `RUNDA ${roundNum}`;
+        }
         
-        // Generuj tabelę
-        autoTable(pdf, {
-            startY: yOffset,
-            head: [["Mecz", "Drużyny", "Wynik", "Data/Godzina", "Boisko", "Status"]],
-            body: tableData,
-            theme: "grid",
-            headStyles: { fillColor: [255, 106, 0], textColor: [0, 0, 0], fontStyle: "bold" },
-            bodyStyles: { textColor: [0, 0, 0] },
-            alternateRowStyles: { fillColor: [240, 240, 240] },
-            margin: { left: 14, right: 14 },
+        pdf.text(removePolishChars(roundTitle), 15, yOffset);
+        yOffset += 7;
+        
+        // ========== TABELA MECZÓW ==========
+        const tableHeaders = [["Mecz", "Druzyna A", "Druzyna B", "Wynik", "Data/Godzina", "Boisko"]];
+        const tableData = matches.map((match, idx) => {
+            // Format daty i godziny
+            let dateTimeStr = "-";
+            if (match.scheduledTime) {
+                const date = new Date(match.scheduledTime);
+                dateTimeStr = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            }
+            
+            let teamA = removePolishChars(match.teamA?.name || "---");
+            let teamB = removePolishChars(match.teamB?.name || "---");
+            
+            // Dodaj wyróżnienie dla zwycięzców
+            if (match.winnerId === match.teamA?.id) {
+                teamA = `★ ${teamA}`;
+            } else if (match.winnerId === match.teamB?.id) {
+                teamB = `★ ${teamB}`;
+            }
+            
+            return [
+                `${match.matchNumber || idx + 1}`,
+                teamA,
+                teamB,
+                match.result || "-",
+                dateTimeStr,
+                match.courtNumber ? `${match.courtNumber}` : "-",
+            ];
         });
         
-        // Pobierz aktualną pozycję Y po tabeli
-        yOffset = (pdf as any).lastAutoTable.finalY + 15;
+        autoTable(pdf, {
+            startY: yOffset,
+            head: tableHeaders,
+            body: tableData,
+            theme: "grid",
+            styles: {
+                fontSize: 9,
+                cellPadding: 3,
+                textColor: [255, 255, 255],
+                lineColor: [255, 106, 0],
+                lineWidth: 0.2,
+            },
+            headStyles: {
+                fillColor: [255, 106, 0],
+                textColor: [0, 0, 0],
+                fontStyle: "bold",
+                fontSize: 10,
+                halign: "center",
+            },
+            bodyStyles: {
+                fillColor: [30, 30, 35],
+            },
+            alternateRowStyles: {
+                fillColor: [45, 45, 50],
+            },
+            columnStyles: {
+                0: { cellWidth: 20, halign: "center" },
+                1: { cellWidth: 75 },
+                2: { cellWidth: 75 },
+                3: { cellWidth: 25, halign: "center" },
+                4: { cellWidth: 35, halign: "center" },
+                5: { cellWidth: 18, halign: "center" },
+            },
+            margin: { left: 15, right: 15 },
+        });
         
-        // Sprawdź czy nie trzeba dodać nowej strony
-        if (yOffset > 250) {
-            pdf.addPage();
-            yOffset = 20;
+        yOffset = (pdf as any).lastAutoTable.finalY + 10;
+        
+        // Linia między rundami
+        if (roundNum !== roundNumbers[roundNumbers.length - 1]) {
+            pdf.setDrawColor(255, 106, 0, 0.3);
+            pdf.setLineWidth(0.3);
+            pdf.line(15, yOffset - 3, 282, yOffset - 3);
         }
-    });
+    }
     
-    pdf.save(`drabinka_${selectedTournamentForDetails?.name || "turniej"}.pdf`);
-    setDialogManageSuccess("Drabinka została pobrana.");
+    // ========== STOPKA ==========
+    const pageCount = pdf.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(7);
+        pdf.setTextColor(120, 120, 120);
+        pdf.text(`Strona ${i} z ${pageCount}`, 148, 195, { align: "center" });
+    }
+    
+    // Zapisz plik
+    const fileName = `drabinka_${removePolishChars(selectedTournamentForDetails?.name || "turniej").replace(/\s+/g, "_")}.pdf`;
+    pdf.save(fileName);
+    setDialogManageSuccess(`Drabinka została pobrana (${bracket.length} meczów, ${teamsCount} drużyn)`);
 };
+
 
   const getRoundTitle = (roundNumber: number): string => {
     switch (roundNumber) {
