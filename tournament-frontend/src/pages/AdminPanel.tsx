@@ -215,7 +215,7 @@ const AdminPanel = () => {
             </Box>
 
             <Box component="main" sx={{ flexGrow: 1, p: 3, mt: "64px" }}>
-                <Container maxWidth={false} sx={{ px: { xs: 2, md: 5 } }}>
+                <Container maxWidth={false} sx={{ px: { xs: 2, md: 5 }, maxWidth: '100% !important' }}>
                     {renderContent()}
                 </Container>
             </Box>
