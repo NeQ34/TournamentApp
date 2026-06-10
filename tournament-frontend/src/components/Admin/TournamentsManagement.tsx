@@ -2,6 +2,7 @@
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useEffect, useState, useRef } from "react";
+import ManualBracket from "./ManualBracket";
 import {
   Box,
   Button,
@@ -153,7 +154,7 @@ const TournamentsManagement = () => {
   const [matchNotes, setMatchNotes] = useState("");
   const [setScores, setSetScores] = useState<string[]>([]);
   const bracketContainerRef = useRef<HTMLDivElement>(null);
-  const [bracketType, setBracketType] = useState<"elimination" | "swiss">("elimination");
+  const [bracketType, setBracketType] = useState<"elimination" | "swiss" | "manual">("elimination");
   const [swissRounds, setSwissRounds] = useState(5);
   const [currentSwissRound, setCurrentSwissRound] = useState(1);
   const [swissStandings, setSwissStandings] = useState<any[]>([]);
@@ -835,6 +836,8 @@ const TournamentsManagement = () => {
     if (!selectedTournamentForDetails) return;
 
     setGenerating(true);
+    setDialogError("");
+    setDialogManageError("");
 
     try {
       const params = new URLSearchParams({
@@ -857,19 +860,18 @@ const TournamentsManagement = () => {
 
       if (response.ok) {
         await fetchBracket(selectedTournamentForDetails.id);
-        setDialogSuccess("Drabinka została wygenerowana.");
+        setDialogManageSuccess("Drabinka została wygenerowana.");
       } else {
         const error = await response.json();
-        setDialogError(error.message || "Błąd generowania drabinki");
+        setDialogManageError(error.message || "Błąd generowania drabinki.");
       }
     } catch (error) {
       console.error("Błąd:", error);
-      setDialogError("Nie udało się połączyć z serwerem.");
+      setDialogManageError("Nie udało się połączyć z serwerem.");
     } finally {
       setGenerating(false);
     }
   };
-
   const handleSaveScore = async () => {
     if (!selectedMatch) return;
 
@@ -1755,12 +1757,13 @@ const TournamentsManagement = () => {
                           <InputLabel sx={{ color: "#ccc" }}>Format</InputLabel>
                           <Select
                               value={bracketType}
-                              onChange={(e) => setBracketType(e.target.value as "elimination" | "swiss")}
+                              onChange={(e) => setBracketType(e.target.value as "elimination" | "swiss" | "manual")}
                               label="Format"
                               sx={{ color: "#fff", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" } }}
                           >
                               <MenuItem value="elimination">Pucharowy</MenuItem>
                               <MenuItem value="swiss">Szwajcarski</MenuItem>
+                              <MenuItem value="manual">ręczny</MenuItem>
                           </Select>
                       </FormControl>
 
@@ -1886,6 +1889,23 @@ const TournamentsManagement = () => {
                                   {swissLoading ? "Inicjalizowanie..." : "Inicjalizuj system szwajcarski"}
                               </Button>
                           </>
+                      )}
+
+                      {/* ===== TRYB RĘCZNY ===== */}
+                      {bracketType === "manual" && selectedTournamentForDetails && (
+                          <ManualBracket
+                              tournamentId={selectedTournamentForDetails.id}
+                              tournamentName={selectedTournamentForDetails.name}
+                              discipline={selectedTournamentForDetails.discipline}
+                              onSuccess={(msg) => {
+                                  setDialogManageSuccess(msg);
+                                  setTimeout(() => setDialogManageSuccess(""), 3000);
+                              }}
+                              onError={(msg) => {
+                                  setDialogManageError(msg);
+                                  setTimeout(() => setDialogManageError(""), 3000);
+                              }}
+                          />
                       )}
                   </Box>
 

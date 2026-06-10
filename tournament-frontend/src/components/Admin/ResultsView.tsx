@@ -45,6 +45,18 @@ const ScheduleView = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
+    const getRoundTitle = (roundNumber: number, totalRounds: number): string => {
+        const diff = totalRounds - roundNumber;
+        switch (diff) {
+            case 0: return "FINAŁ";
+            case 1: return "PÓŁFINAŁ";
+            case 2: return "ĆWIERĆFINAŁ";
+            case 3: return "1/8 FINAŁU";
+            case 4: return "1/16 FINAŁU";
+            default: return `RUNDA ${roundNumber}`;
+        }
+    };
+
     const fetchTournaments = async () => {
         try {
             const response = await fetch("http://localhost:8080/api/admin/tournaments", {
@@ -91,15 +103,7 @@ const ScheduleView = () => {
         }
     };
 
-    const getRoundTitle = (roundNumber: number): string => {
-        switch (roundNumber) {
-            case 1: return "1/8 FINAŁU";
-            case 2: return "ĆWIERĆFINAŁ";
-            case 3: return "PÓŁFINAŁ";
-            case 4: return "FINAŁ";
-            default: return `RUNDA ${roundNumber}`;
-        }
-    };
+
 
     useEffect(() => {
         if (selectedTournamentId) {
@@ -176,6 +180,7 @@ const ScheduleView = () => {
                                 
                                 const rows: React.ReactNode[] = [];
                                 const roundNumbers = Object.keys(grouped).map(Number).sort((a, b) => a - b);
+                                const totalRounds = roundNumbers.length > 0 ? Math.max(...roundNumbers) : 0;
                                 
                                 for (let i = 0; i < roundNumbers.length; i++) {
                                     const round = roundNumbers[i];
@@ -185,7 +190,7 @@ const ScheduleView = () => {
                                         <TableRow key={`round-header-${round}`} sx={{ bgcolor: "rgba(255,106,0,0.15)" }}>
                                             <TableCell colSpan={6} sx={{ py: 1, textAlign: "center" }}>
                                                 <Typography variant="subtitle2" sx={{ color: "#FF6A00", fontWeight: "bold" }}>
-                                                     {getRoundTitle(round)} 
+                                                    {getRoundTitle(round, totalRounds)}
                                                 </Typography>
                                             </TableCell>
                                         </TableRow>
