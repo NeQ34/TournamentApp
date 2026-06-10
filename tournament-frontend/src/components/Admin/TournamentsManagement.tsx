@@ -99,9 +99,21 @@ const TournamentsManagement = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [editingTimeMatch, setEditingTimeMatch] = useState<Match | null>(null);
   const [tempTime, setTempTime] = useState("");
-  const [matchDuration, setMatchDuration] = useState(60);
-  const [breakBetweenMatches, setBreakBetweenMatches] = useState(15);
-  const [startHour, setStartHour] = useState(10);
+  const getSavedAppSettings = () => {
+    try {
+      const saved = localStorage.getItem("app_settings");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const savedSettings = getSavedAppSettings();
+
+  const [numberOfCourts, setNumberOfCourts] = useState(savedSettings?.defaultCourts || 1);
+  const [startHour, setStartHour] = useState(savedSettings?.defaultStartHour || 10);
+  const [matchDuration, setMatchDuration] = useState(savedSettings?.defaultMatchDuration || 60);
+  const [breakBetweenMatches, setBreakBetweenMatches] = useState(savedSettings?.defaultBreakBetweenMatches || 15);
 
   // Formularz
   const [formData, setFormData] = useState({
@@ -140,7 +152,6 @@ const TournamentsManagement = () => {
   const [showNotes, setShowNotes] = useState(false);
   const [matchNotes, setMatchNotes] = useState("");
   const [setScores, setSetScores] = useState<string[]>([]);
-  const [numberOfCourts, setNumberOfCourts] = useState(1);
   const bracketContainerRef = useRef<HTMLDivElement>(null);
   const [bracketType, setBracketType] = useState<"elimination" | "swiss">("elimination");
   const [swissRounds, setSwissRounds] = useState(5);
@@ -368,7 +379,7 @@ const TournamentsManagement = () => {
     setSwissLoading(true);
     try {
         const response = await fetch(
-            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/swiss/initialize?numberOfRounds=${swissRounds}&startHour=10`,
+            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/swiss/initialize?numberOfRounds=${swissRounds}&startHour=${startHour}`,
             { 
                 method: "POST", 
                 headers: { 
@@ -724,7 +735,7 @@ const TournamentsManagement = () => {
           discipline: formData.discipline,
           startDate: formData.startDate,
           endDate: formData.endDate || null,
-          location: formData.location || null,
+          location: formData.location || savedSettings?.defaultLocation || null,
           description: formData.description || null,
           status: formData.status === "archived" ? "archived" : "auto",
           maxTeams: formData.maxTeams ? Number(formData.maxTeams) : null,
@@ -822,23 +833,40 @@ const TournamentsManagement = () => {
   // ========== DRABINKA ==========
   const handleGenerateBracket = async () => {
     if (!selectedTournamentForDetails) return;
+
     setGenerating(true);
+
     try {
-        const response = await fetch(
-            `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/generate-bracket?randomize=${randomize}&numberOfCourts=${numberOfCourts}`,
-            { method: "POST", headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-        );
-        if (response.ok) {
-            await fetchBracket(selectedTournamentForDetails.id);
-            setDialogSuccess("Drabinka została wygenerowana.");
-        } else {
-            const error = await response.json();
-            setDialogError(error.message || "Błąd generowania drabinki");
+      const params = new URLSearchParams({
+        randomize: String(randomize),
+        numberOfCourts: String(numberOfCourts),
+        startHour: String(startHour),
+        matchDuration: String(matchDuration),
+        breakBetweenMatches: String(breakBetweenMatches),
+      });
+
+      const response = await fetch(
+        `http://localhost:8080/api/admin/tournaments/${selectedTournamentForDetails.id}/generate-bracket?${params.toString()}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
         }
+      );
+
+      if (response.ok) {
+        await fetchBracket(selectedTournamentForDetails.id);
+        setDialogSuccess("Drabinka została wygenerowana.");
+      } else {
+        const error = await response.json();
+        setDialogError(error.message || "Błąd generowania drabinki");
+      }
     } catch (error) {
-        console.error("Błąd:", error);
+      console.error("Błąd:", error);
+      setDialogError("Nie udało się połączyć z serwerem.");
     } finally {
-        setGenerating(false);
+      setGenerating(false);
     }
   };
 
@@ -1034,7 +1062,7 @@ const TournamentsManagement = () => {
       discipline: "",
       startDate: "",
       endDate: "",
-      location: "",
+      location: savedSettings?.defaultLocation || "",
       description: "",
       status: "auto",
       maxTeams: "",
@@ -1060,8 +1088,17 @@ const TournamentsManagement = () => {
   };
 
   const openDetailsDialog = (tournament: Tournament) => {
+    const currentSettings = getSavedAppSettings();
+
+    setNumberOfCourts(currentSettings?.defaultCourts || 1);
+    setStartHour(currentSettings?.defaultStartHour || 10);
+    setMatchDuration(currentSettings?.defaultMatchDuration || 60);
+    setBreakBetweenMatches(currentSettings?.defaultBreakBetweenMatches || 15);
+
     setSelectedTournamentForDetails(tournament);
     setTabValue(0);
+    setBracketType("elimination");
+
     fetchRegisteredTeams(tournament.id);
     fetchAvailableTeams(tournament.discipline, tournament.id);
     fetchBracket(tournament.id);
@@ -1763,6 +1800,59 @@ const TournamentsManagement = () => {
                                       "& .MuiInputLabel-root": { color: "#ccc" }
                                   }}
                                   InputLabelProps={{ shrink: true }}
+                              />
+                              <TextField
+                                type="number"
+                                label="Godzina startu"
+                                value={startHour}
+                                disabled={bracket.length > 0}
+                                onChange={(e) => setStartHour(Number(e.target.value))}
+                                size="small"
+                                sx={{
+                                  width: 140,
+                                  "& .MuiOutlinedInput-root": {
+                                    color: "#fff",
+                                    "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+                                  },
+                                  "& .MuiInputLabel-root": { color: "#ccc" },
+                                }}
+                                InputLabelProps={{ shrink: true }}
+                              />
+
+                              <TextField
+                                type="number"
+                                label="Czas meczu / min"
+                                value={matchDuration}
+                                disabled={bracket.length > 0}
+                                onChange={(e) => setMatchDuration(Number(e.target.value))}
+                                size="small"
+                                sx={{
+                                  width: 150,
+                                  "& .MuiOutlinedInput-root": {
+                                    color: "#fff",
+                                    "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+                                  },
+                                  "& .MuiInputLabel-root": { color: "#ccc" },
+                                }}
+                                InputLabelProps={{ shrink: true }}
+                              />
+
+                              <TextField
+                                type="number"
+                                label="Przerwa / min"
+                                value={breakBetweenMatches}
+                                disabled={bracket.length > 0}
+                                onChange={(e) => setBreakBetweenMatches(Number(e.target.value))}
+                                size="small"
+                                sx={{
+                                  width: 140,
+                                  "& .MuiOutlinedInput-root": {
+                                    color: "#fff",
+                                    "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+                                  },
+                                  "& .MuiInputLabel-root": { color: "#ccc" },
+                                }}
+                                InputLabelProps={{ shrink: true }}
                               />
                           </>
                       )}
