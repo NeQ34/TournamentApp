@@ -79,6 +79,9 @@ const ArchiveView = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [disciplineFilter, setDisciplineFilter] = useState("");
     const [disciplines, setDisciplines] = useState<string[]>([]);
+    const [allTeams, setAllTeams] = useState<Team[]>([]);
+    const [teamFilter, setTeamFilter] = useState("");
+    const [tournamentTeamsMap, setTournamentTeamsMap] = useState<Record<number, Team[]>>({});
     const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
     const [tournamentTeams, setTournamentTeams] = useState<Team[]>([]);
     const [tournamentBracket, setTournamentBracket] = useState<Match[]>([]);
@@ -99,6 +102,23 @@ const ArchiveView = () => {
                 );
                 setTournaments(archived);
                 setFilteredTournaments(archived);
+
+                // Pobieranie drużyn dla turniejów archiwalnych pod filtrację
+                const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+                const teamPromises = archived.map(async (t: Tournament) => {
+                    const res = await fetch(`http://localhost:8080/api/admin/tournaments/${t.id}/teams`, { headers });
+                    if (res.ok) {
+                        const teamsData = await res.json();
+                        return { id: t.id, teams: teamsData };
+                    }
+                    return { id: t.id, teams: [] };
+                });
+                const resolvedTeams = await Promise.all(teamPromises);
+                const map: Record<number, Team[]> = {};
+                resolvedTeams.forEach(item => {
+                    map[item.id] = item.teams;
+                });
+                setTournamentTeamsMap(map);
             }
         } catch (error) {
             console.error("Błąd pobierania:", error);
@@ -106,7 +126,6 @@ const ArchiveView = () => {
             setLoading(false);
         }
     };
-
     const fetchDisciplines = async () => {
         try {
             const response = await fetch("http://localhost:8080/api/disciplines");
@@ -118,6 +137,23 @@ const ArchiveView = () => {
             console.error("Błąd pobierania dyscyplin:", error);
         }
     };
+    const fetchAllTeams = async () => {
+        try {
+            const response = await fetch("http://localhost:8080/api/teams");
+            if (response.ok) {
+                const data = await response.json();
+                setAllTeams(data);
+            }
+        } catch (error) {
+            console.error("Błąd pobierania drużyn:", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchArchivedTournaments();
+        fetchDisciplines();
+        fetchAllTeams();
+    }, []);
 
     const fetchTournamentDetails = async (tournamentId: number) => {
         setDetailsLoading(true);
@@ -267,6 +303,15 @@ const ArchiveView = () => {
         setTabValue(0);
         setDetailsOpen(true);
     };
+    // Automatyczny reset filtra drużyny przy zmianie dyscypliny na niezgodną
+    useEffect(() => {
+        if (disciplineFilter && teamFilter) {
+            const selectedTeamObj = allTeams.find(t => t.name === teamFilter);
+            if (selectedTeamObj && selectedTeamObj.sport && selectedTeamObj.sport.toLowerCase() !== disciplineFilter.toLowerCase()) {
+                setTeamFilter("");
+            }
+        }
+    }, [disciplineFilter, teamFilter, allTeams]);
 
     useEffect(() => {
         let filtered = [...tournaments];
@@ -278,8 +323,14 @@ const ArchiveView = () => {
         if (disciplineFilter) {
             filtered = filtered.filter(t => t.discipline === disciplineFilter);
         }
+        if (teamFilter) {
+            filtered = filtered.filter(t => {
+                const tTeams = tournamentTeamsMap[t.id] || [];
+                return tTeams.some(team => team.name === teamFilter);
+            });
+        }
         setFilteredTournaments(filtered);
-    }, [searchTerm, disciplineFilter, tournaments]);
+    }, [searchTerm, disciplineFilter, teamFilter, tournaments, tournamentTeamsMap]);
 
     useEffect(() => {
         fetchArchivedTournaments();
@@ -321,16 +372,22 @@ const ArchiveView = () => {
 
     return (
         <Box>
-            <Typography variant="h4" fontWeight={700} sx={{ color: "#fff", mb: 3 }}>
-                Archiwum turniejów
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+                <Typography variant="h4" fontWeight={700} sx={{ color: "#fff" }}>
+                    Archiwum turniejów
+                </Typography>
+                <Typography variant="body2" sx={{ color: "#aaa", fontWeight: 500 }}>
+                    Znaleziono: {filteredTournaments.length} turniejów
+                </Typography>
+            </Box>
 
             {message.error && <Alert severity="error" sx={{ mb: 2 }}>{message.error}</Alert>}
             {message.success && <Alert severity="success" sx={{ mb: 2 }}>{message.success}</Alert>}
 
             <Paper sx={{ p: 2, mb: 3, bgcolor: "rgba(0,0,0,0.7)", borderRadius: 2 }}>
                 <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} md={4}>
+                    {/* Okno Szukaj turnieju */}
+                    <Grid size={{ xs: 12, md: 4 }}>
                         <TextField
                             size="small"
                             placeholder="Szukaj turnieju..."
@@ -343,7 +400,12 @@ const ArchiveView = () => {
                             sx={{ input: { color: "#fff" } }}
                         />
                     </Grid>
+
+                    {/* Okno Wybierz dyscyplinę */}
+                    <Grid size={{ xs: 12, md: 4 }}>
+
                     <Grid item xs={12} md={4}>
+
                         <FormControl fullWidth size="small">
                             <InputLabel sx={{ color: "#ccc" }}>Dyscyplina</InputLabel>
                             <Select
@@ -352,21 +414,36 @@ const ArchiveView = () => {
                                 label="Dyscyplina"
                                 sx={{ color: "#fff" }}
                             >
-                                <MenuItem value="">Wszystkie</MenuItem>
+                                <MenuItem value="">Wszystkie dyscypliny</MenuItem>
                                 {disciplines.map(d => (
                                     <MenuItem key={d} value={d}>{d}</MenuItem>
                                 ))}
                             </Select>
                         </FormControl>
                     </Grid>
-                    <Grid item xs={12} md={5}>
-                        <Typography variant="body2" sx={{ color: "#aaa", textAlign: "right" }}>
-                            Znaleziono: {filteredTournaments.length} turniejów
-                        </Typography>
+
+                    {/* Okno Wybierz drużynę */}
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <FormControl fullWidth size="small">
+                            <InputLabel sx={{ color: "#ccc" }}>Drużyna</InputLabel>
+                            <Select
+                                value={teamFilter}
+                                onChange={(e) => setTeamFilter(e.target.value)}
+                                label="Drużyna"
+                                sx={{ color: "#fff" }}
+                            >
+                                <MenuItem value="">Wszystkie drużyny</MenuItem>
+                                {allTeams
+                                    .filter(t => !disciplineFilter || (t.sport && t.sport.toLowerCase() === disciplineFilter.toLowerCase()))
+                                    .map(t => (
+                                        <MenuItem key={t.id} value={t.name}>{t.name}</MenuItem>
+                                    ))
+                                }
+                            </Select>
+                        </FormControl>
                     </Grid>
                 </Grid>
             </Paper>
-
             {filteredTournaments.length === 0 ? (
                 <Paper sx={{ p: 4, textAlign: "center", bgcolor: "rgba(0,0,0,0.7)", borderRadius: 2 }}>
                     <Typography sx={{ color: "#aaa" }}>Brak archiwalnych turniejów.</Typography>
@@ -374,7 +451,7 @@ const ArchiveView = () => {
             ) : (
                 <Grid container spacing={2}>
                     {filteredTournaments.map((tournament) => (
-                        <Grid item xs={12} key={tournament.id}>
+                        <Grid size={{ xs: 12 }} key={tournament.id}>
                             <Card sx={{ bgcolor: "rgba(0,0,0,0.7)", borderRadius: 2, border: "1px solid rgba(255,106,0,0.3)" }}>
                                 <CardContent>
                                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -470,27 +547,27 @@ const ArchiveView = () => {
                                 <Box>
                                     <Typography variant="subtitle1" sx={{ color: "#FF6A00", mb: 1 }}>Podstawowe informacje</Typography>
                                     <Grid container spacing={2}>
-                                        <Grid item xs={12} md={6}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Nazwa turnieju</Typography>
                                             <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>{selectedTournament?.name}</Typography>
                                         </Grid>
-                                        <Grid item xs={12} md={6}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Dyscyplina</Typography>
                                             <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>{selectedTournament?.discipline}</Typography>
                                         </Grid>
-                                        <Grid item xs={12} md={6}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Data rozpoczęcia</Typography>
                                             <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>{selectedTournament?.startDate}</Typography>
                                         </Grid>
-                                        <Grid item xs={12} md={6}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Data zakończenia</Typography>
                                             <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>{selectedTournament?.endDate || "—"}</Typography>
                                         </Grid>
-                                        <Grid item xs={12} md={6}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Lokalizacja</Typography>
                                             <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>{selectedTournament?.location || "—"}</Typography>
                                         </Grid>
-                                        <Grid item xs={12} md={6}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Status</Typography>
                                             <Chip label={getStatusLabel(selectedTournament?.status || "")} size="small" sx={{ mt: 0.5 }} />
                                         </Grid>

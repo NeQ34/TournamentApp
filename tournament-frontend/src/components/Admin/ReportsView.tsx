@@ -139,7 +139,6 @@ const ReportsView = () => {
                                 </FormControl>
                             </Box>
                         </Box>
-
                         {teamStats ? (
                             <Box sx={{
                                 display: 'flex', alignItems: 'center', gap: 8, p: 5,
