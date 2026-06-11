@@ -18,6 +18,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 
@@ -48,6 +52,9 @@ const Teams = ({ userData }: TeamsProps) => {
   const [myTeams, setMyTeams] = useState<Team[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sportFilter, setSportFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -253,18 +260,41 @@ const Teams = ({ userData }: TeamsProps) => {
     </Box>
   );
 
-  // Pobierz ID drużyn, w których użytkownik jest kapitanem
   const myTeamIds = myTeams.map(team => team.id);
 
-  // Aktywne drużyny - bez drużyn użytkownika
-  const activeTeams = teams.filter(t => 
-    t.status === "active" && !myTeamIds.includes(t.id)
+  const availableSports = Array.from(
+    new Set(teams.map((team) => team.sport).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, "pl", { sensitivity: "base" }));
+
+  const filterTeams = (teamsList: Team[]) => {
+    return teamsList.filter((team) => {
+      const matchesSearch =
+        !searchTerm ||
+        team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        team.sport.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (team.captainName || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesSport =
+        !sportFilter || team.sport === sportFilter;
+
+      const matchesStatus =
+        !statusFilter || team.status === statusFilter;
+
+      return matchesSearch && matchesSport && matchesStatus;
+    });
+  };
+
+  const activeTeams = filterTeams(
+    teams.filter(t => t.status === "active" && !myTeamIds.includes(t.id))
   );
 
-  // Oczekujące drużyny - bez drużyn użytkownika (ale tu mogą być jego zgłoszenia)
-  const pendingTeams = teams.filter(t => 
-    t.status === "pending" && !myTeamIds.includes(t.id)
+  const pendingTeams = filterTeams(
+    teams.filter(t => t.status === "pending" && !myTeamIds.includes(t.id))
   );
+
+  const filteredMyTeams = filterTeams(myTeams);
+
+
 
   return (
     <Box>
@@ -286,9 +316,76 @@ const Teams = ({ userData }: TeamsProps) => {
         </Button>
       </Box>
 
+      <Paper
+        sx={{
+          p: 2,
+          mb: 3,
+          bgcolor: "rgba(0,0,0,0.5)",
+          borderRadius: 2,
+        }}
+      >
+        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <TextField
+            size="small"
+            label="Szukaj drużyny"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            sx={{
+              minWidth: 240,
+              input: { color: "#fff" },
+              "& .MuiInputLabel-root": { color: "#ccc" },
+            }}
+          />
+
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel sx={{ color: "#ccc" }}>Dyscyplina</InputLabel>
+            <Select
+              value={sportFilter}
+              label="Dyscyplina"
+              onChange={(e) => setSportFilter(e.target.value)}
+              sx={{ color: "#fff" }}
+            >
+              <MenuItem value="">Wszystkie</MenuItem>
+              {availableSports.map((sport) => (
+                <MenuItem key={sport} value={sport}>
+                  {sport}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel sx={{ color: "#ccc" }}>Status</InputLabel>
+            <Select
+              value={statusFilter}
+              label="Status"
+              onChange={(e) => setStatusFilter(e.target.value)}
+              sx={{ color: "#fff" }}
+            >
+              <MenuItem value="">Wszystkie</MenuItem>
+              <MenuItem value="active">Aktywne</MenuItem>
+              <MenuItem value="pending">Oczekujące</MenuItem>
+              <MenuItem value="inactive">Nieaktywne</MenuItem>
+            </Select>
+          </FormControl>
+
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setSearchTerm("");
+              setSportFilter("");
+              setStatusFilter("");
+            }}
+            sx={{ color: "#ccc", borderColor: "#666" }}
+          >
+            Wyczyść
+          </Button>
+        </Box>
+      </Paper>
+
       {/* Sekcja: Twoje drużyny - drużyny gdzie użytkownik jest kapitanem */}
-      {myTeams.length > 0 && (
-        <TeamsTable teamsList={myTeams} title="Twoje drużyny" />
+      {filteredMyTeams.length > 0 && (
+        <TeamsTable teamsList={filteredMyTeams} title="Twoje drużyny" />
       )}
 
       {/* Sekcja: Wszystkie aktywne drużyny - BEZ drużyn użytkownika */}

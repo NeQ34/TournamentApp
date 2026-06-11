@@ -19,6 +19,7 @@ import {
     CircularProgress,
 } from "@mui/material";
 import { Edit as EditIcon } from "@mui/icons-material";
+import { getAppSettings } from "../../utils/appSettings";
 
 interface Tournament {
     id: number;
@@ -44,6 +45,8 @@ const ScheduleView = () => {
     const [matches, setMatches] = useState<Match[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const appSettings = getAppSettings();
+    const tableSize = appSettings.compactTables ? "small" : "medium";
 
     const getRoundTitle = (roundNumber: number, totalRounds: number): string => {
         const diff = totalRounds - roundNumber;
@@ -159,7 +162,7 @@ const ScheduleView = () => {
 
                 {!loading && matches.length > 0 && (
                 <TableContainer>
-                    <Table>
+                    <Table size={tableSize}>
                         <TableHead>
                             <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
                                 <TableCell sx={{ color: "#FF6A00" }}>Data / Godzina</TableCell>

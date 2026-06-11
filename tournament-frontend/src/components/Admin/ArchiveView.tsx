@@ -38,6 +38,7 @@ import {
 } from "@mui/icons-material";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatAppDate } from "../../utils/appSettings";
 
 interface Tournament {
     id: number;
@@ -401,25 +402,23 @@ const ArchiveView = () => {
                         />
                     </Grid>
 
+
                     {/* Okno Wybierz dyscyplinę */}
                     <Grid size={{ xs: 12, md: 4 }}>
-
-                    <Grid item xs={12} md={4}>
-
-                        <FormControl fullWidth size="small">
-                            <InputLabel sx={{ color: "#ccc" }}>Dyscyplina</InputLabel>
-                            <Select
-                                value={disciplineFilter}
-                                onChange={(e) => setDisciplineFilter(e.target.value)}
-                                label="Dyscyplina"
-                                sx={{ color: "#fff" }}
-                            >
-                                <MenuItem value="">Wszystkie dyscypliny</MenuItem>
-                                {disciplines.map(d => (
-                                    <MenuItem key={d} value={d}>{d}</MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                      <FormControl fullWidth size="small">
+                        <InputLabel sx={{ color: "#ccc" }}>Dyscyplina</InputLabel>
+                        <Select
+                          value={disciplineFilter}
+                          onChange={(e) => setDisciplineFilter(e.target.value)}
+                          label="Dyscyplina"
+                          sx={{ color: "#fff" }}
+                        >
+                          <MenuItem value="">Wszystkie dyscypliny</MenuItem>
+                          {disciplines.map(d => (
+                            <MenuItem key={d} value={d}>{d}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Grid>
 
                     {/* Okno Wybierz drużynę */}
@@ -463,7 +462,8 @@ const ArchiveView = () => {
                                                 {tournament.discipline}
                                             </Typography>
                                             <Typography variant="caption" sx={{ color: "#aaa", display: "block" }}>
-                                                {tournament.startDate} {tournament.endDate && `- ${tournament.endDate}`}
+                                                {formatAppDate(tournament.startDate)}
+                                                {tournament.endDate && ` - ${formatAppDate(tournament.endDate)}`}
                                             </Typography>
                                             {tournament.location && (
                                                 <Typography variant="caption" sx={{ color: "#aaa", display: "block" }}>
@@ -557,11 +557,17 @@ const ArchiveView = () => {
                                         </Grid>
                                         <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Data rozpoczęcia</Typography>
-                                            <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>{selectedTournament?.startDate}</Typography>
+                                            <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>
+                                                {formatAppDate(selectedTournament?.startDate)}
+                                            </Typography>
                                         </Grid>
                                         <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Data zakończenia</Typography>
-                                            <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>{selectedTournament?.endDate || "—"}</Typography>
+                                            <Typography variant="body1" sx={{ color: "#fff", mb: 1 }}>
+                                                {selectedTournament?.endDate
+                                                    ? formatAppDate(selectedTournament.endDate)
+                                                    : "—"}
+                                            </Typography>
                                         </Grid>
                                         <Grid size={{ xs: 12, md: 6 }}>
                                             <Typography variant="caption" sx={{ color: "#aaa" }}>Lokalizacja</Typography>

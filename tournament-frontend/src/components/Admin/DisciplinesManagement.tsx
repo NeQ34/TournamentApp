@@ -17,12 +17,15 @@ import {
   TableRow,
   TextField,
   Typography,
+  TablePagination,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from "@mui/icons-material";
+
+import { getAppSettings } from "../../utils/appSettings";
 
 interface Discipline {
   id: number;
@@ -50,6 +53,12 @@ const DisciplinesManagement = ({
   const [messageSuccess, setMessageSuccess] = useState("");
   const [similarDisciplines, setSimilarDisciplines] = useState<string[]>([]);
   const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
+  const appSettings = getAppSettings();
+  const tableSize = appSettings.compactTables ? "small" : "medium";
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(appSettings.rowsPerPage);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [disciplineToDelete, setDisciplineToDelete] = useState<number | null>(null);
 
   const fetchDisciplines = async () => {
     try {
@@ -92,6 +101,16 @@ const DisciplinesManagement = ({
   useEffect(() => {
     fetchDisciplines();
   }, []);
+
+useEffect(() => {
+  if (!getAppSettings().autoRefreshData) return;
+
+  const interval = setInterval(() => {
+    fetchDisciplines();
+  }, 10000);
+
+  return () => clearInterval(interval);
+}, []);
 
   useEffect(() => {
     if (!disciplineToEditName || disciplines.length === 0) return;
@@ -240,27 +259,43 @@ const DisciplinesManagement = ({
     }
   };
 
-  const handleDelete = async (id: number) => {
-    setMessageError("");
-    setMessageSuccess("");
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
 
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const handleDelete = async (id: number) => {
     try {
       const response = await fetch(`http://localhost:8080/api/admin/disciplines/${id}`, {
         method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
       });
 
+    if (response.ok) {
+      await fetchDisciplines();
+      setMessageSuccess("Dyscyplina została usunięta.");
+    } else {
+      setMessageError("Nie udało się usunąć dyscypliny.");
+    }
+
       if (response.ok) {
-        await fetchDisciplines();
-        setMessageSuccess("Dyscyplina została usunięta.");
-      } else {
-        const errorData = await response.json();
-        setMessageError(errorData.message || "Nie udało się usunąć dyscypliny.");
+        fetchDisciplines();
       }
     } catch (error) {
       console.error("Błąd usuwania dyscypliny:", error);
-      setMessageError("Nie udało się połączyć z serwerem.");
+    } finally {
+      setConfirmDeleteOpen(false);
+      setDisciplineToDelete(null);
     }
   };
+
+
 
   return (
     <Box>
@@ -299,7 +334,7 @@ const DisciplinesManagement = ({
           borderRadius: 4,
         }}
       >
-        <Table>
+        <Table size={tableSize}>
           <TableHead>
             <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
               <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Lp.</TableCell>
@@ -317,9 +352,15 @@ const DisciplinesManagement = ({
               .sort((a, b) =>
                 a.name.localeCompare(b.name, "pl", { sensitivity: "base" })
               )
+              .slice(
+                page * rowsPerPage,
+                page * rowsPerPage + rowsPerPage
+              )
               .map((discipline, index) => (
               <TableRow key={`${discipline.id}-${discipline.name}-${discipline.minMembers}-${discipline.maxMembers}`}>
-                <TableCell sx={{ color: "#fff" }}>{index + 1}</TableCell>
+                <TableCell sx={{ color: "#fff" }}>
+                  {page * rowsPerPage + index + 1}
+                </TableCell>
                 <TableCell sx={{ color: "#fff" }}>{discipline.name}</TableCell>
                 <TableCell sx={{ color: "#fff" }}>{discipline.minMembers}</TableCell>
                 <TableCell sx={{ color: "#fff" }}>{discipline.maxMembers}</TableCell>
@@ -332,7 +373,14 @@ const DisciplinesManagement = ({
                   </IconButton>
 
                   <IconButton
-                    onClick={() => handleDelete(discipline.id)}
+                    onClick={() => {
+                      if (getAppSettings().confirmDangerousActions) {
+                        setDisciplineToDelete(discipline.id);
+                        setConfirmDeleteOpen(true);
+                      } else {
+                        handleDelete(discipline.id);
+                      }
+                    }}
                     sx={{ color: "#ff6b6b" }}
                   >
                     <DeleteIcon />
@@ -343,6 +391,21 @@ const DisciplinesManagement = ({
           </TableBody>
         </Table>
       </TableContainer>
+
+      <TablePagination
+        rowsPerPageOptions={[5, 10, 25, 50]}
+        component="div"
+        count={disciplines.length}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+        sx={{
+          color: "#fff",
+          "& .MuiTablePagination-selectIcon": { color: "#fff" },
+          "& .MuiTablePagination-select": { color: "#fff" },
+        }}
+      />
 
       <Dialog
         open={openDialog}
@@ -453,6 +516,45 @@ const DisciplinesManagement = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        PaperProps={{
+          sx: {
+            bgcolor: "rgba(0,0,0,0.9)",
+            color: "#fff",
+            borderRadius: 4,
+          },
+        }}
+      >
+        <DialogTitle>Usuń dyscyplinę</DialogTitle>
+
+        <DialogContent>
+          <Typography>
+            Czy na pewno chcesz usunąć tę dyscyplinę?
+          </Typography>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setConfirmDeleteOpen(false)} sx={{ color: "#ccc" }}>
+            Anuluj
+          </Button>
+
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              if (disciplineToDelete !== null) {
+                handleDelete(disciplineToDelete);
+              }
+            }}
+          >
+            Usuń
+          </Button>
+        </DialogActions>
+      </Dialog>
+
     </Box>
   );
 };

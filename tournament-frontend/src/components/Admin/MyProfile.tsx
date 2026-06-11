@@ -3,6 +3,10 @@ import {
     Box, Button, Typography, Paper, TextField, Alert, Avatar, Divider, CircularProgress,
 } from "@mui/material";
 import { Save as SaveIcon, Lock as LockIcon } from "@mui/icons-material";
+import {
+    getAppSettings,
+    validatePasswordBySettings,
+} from "../../utils/appSettings";
 
 interface UserData {
     id: number;
@@ -11,6 +15,14 @@ interface UserData {
     email: string;
     role: string;
 }
+
+const getPasswordRequirements = (password: string) => ({
+    length: password.length >= 8,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    digit: /[0-9]/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+});
 
 const MyProfile = () => {
     const [userData, setUserData] = useState<UserData | null>(null);
@@ -21,6 +33,9 @@ const MyProfile = () => {
     const [passwordMessage, setPasswordMessage] = useState({ error: "", success: "" });
     const [loading, setLoading] = useState(false);
     const [passwordLoading, setPasswordLoading] = useState(false);
+    const passwordRequirements = getPasswordRequirements(passwordData.newPassword);
+    const strongPasswordRequired = getAppSettings().requireStrongPassword;
+    const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
 
     // Pobierz dane z backendu
     const fetchUserProfile = async () => {
@@ -119,8 +134,10 @@ const MyProfile = () => {
             return;
         }
 
-        if (passwordData.newPassword.length < 6) {
-            setPasswordMessage({ error: "Nowe hasło musi mieć co najmniej 6 znaków.", success: "" });
+        const passwordError = validatePasswordBySettings(passwordData.newPassword);
+
+        if (passwordError) {
+            setPasswordMessage({ error: passwordError, success: "" });
             return;
         }
 
@@ -143,8 +160,18 @@ const MyProfile = () => {
             const data = await response.json();
 
             if (response.ok) {
-                setPasswordMessage({ error: "", success: "Hasło zostało zmienione w bazie danych!" });
-                setPasswordData({ oldPassword: "", newPassword: "", confirmPassword: "" });
+                setPasswordMessage({
+                    error: "",
+                    success: "Hasło zostało zmienione w bazie danych!"
+                });
+
+                setPasswordData({
+                    oldPassword: "",
+                    newPassword: "",
+                    confirmPassword: ""
+                });
+
+                setShowPasswordRequirements(false);
             } else {
                 setPasswordMessage({ error: data.message || "Błąd zmiany hasła", success: "" });
             }
@@ -266,16 +293,43 @@ const MyProfile = () => {
                         inputProps={{ style: { color: "#fff" } }}
                     />
                     <TextField 
-                        type="password" 
-                        label="Nowe hasło" 
-                        fullWidth 
-                        value={passwordData.newPassword} 
-                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })} 
+                        type="password"
+                        label="Nowe hasło"
+                        fullWidth
+                        value={passwordData.newPassword}
+                        onFocus={() => setShowPasswordRequirements(true)}
+                        onBlur={() => {
+                            if (!passwordData.newPassword) {
+                                setShowPasswordRequirements(false);
+                            }
+                        }}
+                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                         sx={{ mb: 2 }}
                         InputLabelProps={{ style: { color: "#ccc" } }}
                         inputProps={{ style: { color: "#fff" } }}
-                        helperText="Minimum 6 znaków"
                     />
+                    {strongPasswordRequired && showPasswordRequirements && (
+                        <Box sx={{ ml: 1, mt: -1, mb: 2 }}>
+                            {[
+                                ["Minimum 8 znaków", passwordRequirements.length],
+                                ["Wielka litera", passwordRequirements.upper],
+                                ["Mała litera", passwordRequirements.lower],
+                                ["Cyfra", passwordRequirements.digit],
+                                ["Znak specjalny", passwordRequirements.special],
+                            ].map(([label, ok]) => (
+                                <Typography
+                                    key={String(label)}
+                                    variant="caption"
+                                    sx={{
+                                        display: "block",
+                                        color: ok ? "#4caf50" : "#ff6b6b",
+                                    }}
+                                >
+                                    {ok ? "✓" : "✗"} {label}
+                                </Typography>
+                            ))}
+                        </Box>
+                    )}
                     <TextField 
                         type="password" 
                         label="Potwierdź nowe hasło" 

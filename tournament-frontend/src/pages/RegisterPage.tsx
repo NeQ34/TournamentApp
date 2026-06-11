@@ -65,10 +65,19 @@ const registerSchema = z.object({
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
+const getPasswordRequirements = (password: string) => ({
+    length: password.length >= 8,
+    upper: /[A-Z]/.test(password),
+    lower: /[a-z]/.test(password),
+    digit: /[0-9]/.test(password),
+    special: /[!@#$%^&*]/.test(password),
+});
+
 const RegisterPage = () => {
     const navigate = useNavigate();
     const [serverError, setServerError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
 
     const {
         register,
@@ -76,6 +85,7 @@ const RegisterPage = () => {
         formState: { errors, isSubmitting },
         setError,
         reset,
+        watch,
     } = useForm<RegisterFormData>({
         resolver: zodResolver(registerSchema),
         defaultValues: {
@@ -89,6 +99,9 @@ const RegisterPage = () => {
         },
         mode: "onChange",
     });
+
+const watchedPassword = watch("password") || "";
+const passwordRequirements = getPasswordRequirements(watchedPassword);
 
 
     const onSubmit = async (data: RegisterFormData) => {
@@ -269,8 +282,18 @@ const RegisterPage = () => {
                                 label="Hasło"
                                 type="password"
                                 {...register("password")}
+                                onFocus={() => setShowPasswordRequirements(true)}
+                                onBlur={() => {
+                                    if (!watchedPassword) {
+                                        setShowPasswordRequirements(false);
+                                    }
+                                }}
                                 error={!!errors.password}
-                                helperText={errors.password?.message}
+                                helperText={
+                                  showPasswordRequirements
+                                    ? ""
+                                    : errors.password?.message
+                                }
                                 fullWidth
                                 disabled={isSubmitting}
                                 InputLabelProps={{ style: { color: "#ccc" } }}
@@ -279,6 +302,29 @@ const RegisterPage = () => {
                                     "& .MuiFormHelperText-root": { color: "#ff6b6b", fontSize: "20px" }
                                 }}
                             />
+
+                            {showPasswordRequirements && (
+                                <Box sx={{ ml: 1, mt: -1 }}>
+                                    {[
+                                        ["Minimum 8 znaków", passwordRequirements.length],
+                                        ["Wielka litera", passwordRequirements.upper],
+                                        ["Mała litera", passwordRequirements.lower],
+                                        ["Cyfra", passwordRequirements.digit],
+                                        ["Znak specjalny (!@#$%^&*)", passwordRequirements.special],
+                                    ].map(([label, ok]) => (
+                                        <Typography
+                                            key={String(label)}
+                                            variant="caption"
+                                            sx={{
+                                                display: "block",
+                                                color: ok ? "#4caf50" : "#ff6b6b",
+                                            }}
+                                        >
+                                            {ok ? "✓" : "✗"} {label}
+                                        </Typography>
+                                    ))}
+                                </Box>
+                            )}
 
                             <TextField
                                 label="Powtórz hasło"

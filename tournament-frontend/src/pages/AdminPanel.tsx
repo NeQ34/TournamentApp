@@ -47,6 +47,7 @@ import MyProfile from "../components/Admin/MyProfile";
 import BracketsView from "./BracketsView";
 import ArchiveView from "../components/Admin/ArchiveView";
 import SettingsView from "../components/Admin/SettingsView";
+import { getAppSettings } from "../utils/appSettings";
 
 const drawerWidth = 280;
 
@@ -62,6 +63,58 @@ const AdminPanel = () => {
         return userDataRaw ? JSON.parse(userDataRaw) : null;
     }, []);
 
+    const [appSettings, setAppSettings] = useState(getAppSettings());
+
+    useEffect(() => {
+        const refreshSettings = () => setAppSettings(getAppSettings());
+
+        window.addEventListener("storage", refreshSettings);
+        const interval = setInterval(refreshSettings, 500);
+
+        return () => {
+            window.removeEventListener("storage", refreshSettings);
+            clearInterval(interval);
+        };
+    }, []);
+
+    useEffect(() => {
+        const timeoutMs = appSettings.sessionTimeoutMinutes * 60 * 1000;
+
+        let timer: ReturnType<typeof setTimeout>;
+
+        const logoutByTimeout = () => {
+            localStorage.removeItem("user");
+            localStorage.removeItem("token");
+            navigate("/login");
+        };
+
+        const resetTimer = () => {
+            clearTimeout(timer);
+            timer = setTimeout(logoutByTimeout, timeoutMs);
+        };
+
+        const events = [
+            "mousemove",
+            "mousedown",
+            "keydown",
+            "scroll",
+            "touchstart",
+        ];
+
+        events.forEach((event) => {
+            window.addEventListener(event, resetTimer);
+        });
+
+        resetTimer();
+
+        return () => {
+            clearTimeout(timer);
+
+            events.forEach((event) => {
+                window.removeEventListener(event, resetTimer);
+            });
+        };
+    }, [appSettings.sessionTimeoutMinutes, navigate]);
 
     useEffect(() => {
         if (!userData || userData.role !== "admin") {
@@ -156,7 +209,7 @@ const AdminPanel = () => {
         <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
             <Box sx={{ p: 3, textAlign: "center" }}>
                 <Typography variant="h5" sx={{ fontWeight: "bold", color: "#FF6A00", letterSpacing: 1 }}>
-                    SPORT<span style={{ color: "#fff" }}>TURNIEJE</span>
+                    {appSettings.organizationName}
                 </Typography>
                 <Chip label="PANEL ADMINA" size="small" sx={{ mt: 1, bgcolor: "#FF6A00", color: "#fff", fontWeight: "bold" }} />
             </Box>

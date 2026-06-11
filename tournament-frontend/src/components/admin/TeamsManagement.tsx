@@ -40,6 +40,8 @@ import {
   CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
 
+import { getAppSettings } from "../../utils/appSettings";
+
 // ========== TYPY ==========
 interface Team {
   id: number;
@@ -572,7 +574,14 @@ const TeamsManagement = ({ onConfigureDiscipline }: TeamsManagementProps) => {
   const [teamToDelete, setTeamToDelete] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(() => getAppSettings().rowsPerPage);
+    useEffect(() => {
+      const interval = setInterval(() => {
+        setRowsPerPage(getAppSettings().rowsPerPage);
+      }, 500);
+
+      return () => clearInterval(interval);
+    }, []);
   const [formData, setFormData] = useState({
     name: "",
     sport: "",
@@ -587,6 +596,8 @@ const [similarDisciplines, setSimilarDisciplines] = useState<string[]>([]);
 const [ignoreSimilarDisciplines, setIgnoreSimilarDisciplines] = useState(false);
 const [newDisciplineDialogOpen, setNewDisciplineDialogOpen] = useState(false);
 const [newDisciplineName, setNewDisciplineName] = useState("");
+const appSettings = getAppSettings();
+const tableSize = appSettings.compactTables ? "small" : "medium";
 
 
   // Funkcja filtrowania drużyn
@@ -896,6 +907,16 @@ const [newDisciplineName, setNewDisciplineName] = useState("");
   }, []);
 
 useEffect(() => {
+  if (!getAppSettings().autoRefreshData) return;
+
+  const interval = setInterval(() => {
+    fetchTeams();
+  }, 10000);
+
+  return () => clearInterval(interval);
+}, []);
+
+useEffect(() => {
   if (!dialogError && !dialogSuccess) return;
 
   const timer = setTimeout(() => {
@@ -1002,7 +1023,9 @@ useEffect(() => {
                     overflow: "auto",
                   }}
               >
-                <Table sx={{ minWidth: 650 }}>
+                <Table size={tableSize}
+                sx={{ minWidth: 650 }}
+                >
                   <TableHead>
                     <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
                       <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Nazwa drużyny</TableCell>
@@ -1056,8 +1079,12 @@ useEffect(() => {
                               <IconButton
                                   size="small"
                                   onClick={() => {
-                                    setTeamToDelete(team.id);
-                                    setConfirmOpen(true);
+                                    if (getAppSettings().confirmDangerousActions) {
+                                      setTeamToDelete(team.id);
+                                      setConfirmOpen(true);
+                                    } else {
+                                      handleDeleteTeam(team.id);
+                                    }
                                   }}
                                   sx={{ color: "#ff6b6b" }}
                                   title="Usuń"
@@ -1124,7 +1151,9 @@ useEffect(() => {
                     overflow: "auto",
                   }}
               >
-                <Table sx={{ minWidth: 650 }}>
+                <Table size={tableSize}
+                sx={{ minWidth: 650 }}
+                >
                   <TableHead>
                     <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
                       <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Nazwa drużyny</TableCell>
@@ -1212,8 +1241,12 @@ useEffect(() => {
                               <IconButton
                                 size="small"
                                 onClick={() => {
-                                  setTeamToDelete(team.id);
-                                  setConfirmOpen(true);
+                                  if (getAppSettings().confirmDangerousActions) {
+                                    setTeamToDelete(team.id);
+                                    setConfirmOpen(true);
+                                  } else {
+                                    handleDeleteTeam(team.id);
+                                  }
                                 }}
                                 sx={{ color: "#ff6b6b" }}
                                 title="Usuń"

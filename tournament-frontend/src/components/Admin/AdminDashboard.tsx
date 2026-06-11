@@ -176,7 +176,7 @@ const AdminDashboard = ({ role, userData, onNavigate }: DashboardProps) => {
                                 <Grid item xs={6} sm={3} md={2} key={i}>
                                     <Button
                                         fullWidth
-                                        onClick={() => onNavigate(s.tab)}
+                                        onClick={() => onNavigate(s.t)}
                                         startIcon={s.i}
                                         sx={{ color: "#fff", justifyContent: 'flex-start', bgcolor: "rgba(255,255,255,0.05)", borderRadius: 2, fontSize: '0.7rem', fontWeight: 700, py: 1 }}
                                     >
