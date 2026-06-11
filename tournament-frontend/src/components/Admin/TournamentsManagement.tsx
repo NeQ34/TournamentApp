@@ -62,6 +62,7 @@ interface Tournament {
   status: "planned" | "ongoing" | "finished" | "archived";
   maxTeams?: number;
   registeredTeamsCount?: number;
+  bracketType?: "auto" | "elimination" | "swiss" | "manual";
 }
 
 interface Team {
@@ -130,16 +131,17 @@ const TournamentsManagement = () => {
   const tableSize = appSettings.compactTables ? "small" : "medium";
 
   // Formularz
-  const [formData, setFormData] = useState({
-    name: "",
-    discipline: "",
-    startDate: "",
-    endDate: "",
-    location: "",
-    description: "",
-    status: "auto" as any,
-    maxTeams: "",
-  });
+ const [formData, setFormData] = useState({
+   name: "",
+   discipline: "",
+   startDate: "",
+   endDate: "",
+   location: "",
+   description: "",
+   status: "auto" as any,
+   maxTeams: "",
+   systemType: "elimination" as "elimination" | "swiss" | "manual",
+ });
 
   // Zakładki w szczegółach turnieju
   const [selectedTournamentForDetails, setSelectedTournamentForDetails] = useState<Tournament | null>(null);
@@ -579,6 +581,7 @@ const TournamentsManagement = () => {
       });
       if (response.ok) {
         const data = await response.json();
+        console.log("TURNIEJE Z BACKENDU:", data);
         setTournaments(data);
       }
     } catch (error) {
@@ -641,12 +644,13 @@ const TournamentsManagement = () => {
   };
 
   const fetchBracket = async (tournamentId: number) => {
-    setBracketLoading(true);
-    try {
-        const response = await fetch(
-            `http://localhost:8080/api/admin/tournaments/${tournamentId}/bracket`,
-            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-        );
+      setBracketLoading(true);
+
+      try {
+          const response = await fetch(
+              `http://localhost:8080/api/admin/tournaments/${tournamentId}/bracket`,
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+          );
         if (response.ok) {
             let data = await response.json();
             
@@ -753,6 +757,7 @@ const TournamentsManagement = () => {
           description: formData.description || null,
           status: formData.status === "archived" ? "archived" : "auto",
           maxTeams: formData.maxTeams ? Number(formData.maxTeams) : null,
+          bracketType: formData.systemType,
         }),
       });
 
@@ -851,6 +856,16 @@ const TournamentsManagement = () => {
     setGenerating(true);
     setDialogError("");
     setDialogManageError("");
+
+
+    console.log("GENEROWANIE DRABINKI", {
+      tournamentId: selectedTournamentForDetails?.id,
+      bracketType,
+      numberOfCourts,
+      startHour,
+      matchDuration,
+      breakBetweenMatches,
+    });
 
     try {
       const params = new URLSearchParams({
@@ -1081,6 +1096,7 @@ const TournamentsManagement = () => {
       description: "",
       status: "auto",
       maxTeams: "",
+      systemType: "elimination",
     });
     setSelectedTournament(null);
     setDialogError("");
@@ -1098,6 +1114,12 @@ const TournamentsManagement = () => {
       description: tournament.description || "",
       status: tournament.status === "archived" ? "archived" : "auto",
       maxTeams: tournament.maxTeams?.toString() || "",
+      systemType:
+        tournament.bracketType === "swiss" ||
+        tournament.bracketType === "manual" ||
+        tournament.bracketType === "elimination"
+          ? tournament.bracketType
+          : "elimination",
     });
     setOpenDialog(true);
   };
@@ -1112,7 +1134,14 @@ const TournamentsManagement = () => {
 
     setSelectedTournamentForDetails(tournament);
     setTabValue(0);
-    setBracketType("elimination");
+    const savedSystemType =
+      tournament.bracketType === "swiss" ||
+      tournament.bracketType === "manual" ||
+      tournament.bracketType === "elimination"
+        ? tournament.bracketType
+        : "elimination";
+
+    setBracketType(savedSystemType);
 
     fetchRegisteredTeams(tournament.id);
     fetchAvailableTeams(tournament.discipline, tournament.id);
@@ -1645,6 +1674,7 @@ useEffect(() => {
             <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
               <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Nazwa</TableCell>
               <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Dyscyplina</TableCell>
+              <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>System</TableCell>
               <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Data</TableCell>
               <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Drużyny</TableCell>
               <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Status</TableCell>
@@ -1658,6 +1688,13 @@ useEffect(() => {
                 <TableRow key={tournament.id} sx={{ "&:hover": { bgcolor: "rgba(255,255,255,0.05)" } }}>
                   <TableCell sx={{ color: "#fff", fontWeight: 600 }}>{tournament.name}</TableCell>
                   <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{tournament.discipline}</TableCell>
+                  <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>
+                    {tournament.bracketType === "swiss"
+                      ? "Szwajcarski"
+                      : tournament.bracketType === "manual"
+                        ? "Ręczny"
+                        : "Pucharowy"}
+                  </TableCell>
                   <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>
                     {formatAppDate(tournament.startDate)}
                     {tournament.endDate ? ` - ${formatAppDate(tournament.endDate)}` : ""}
@@ -1780,6 +1817,25 @@ useEffect(() => {
               InputLabelProps={{ style: { color: "#ccc" } }}
               sx={{ input: { color: "#fff" } }}
             />
+            <FormControl fullWidth>
+              <InputLabel sx={{ color: "#ccc" }}>System rozgrywek</InputLabel>
+              <Select
+                value={formData.systemType}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    systemType: e.target.value as "elimination" | "swiss" | "manual",
+                  })
+                }
+                label="System rozgrywek"
+                sx={{ color: "#fff" }}
+              >
+                <MenuItem value="elimination">Pucharowy</MenuItem>
+                <MenuItem value="swiss">Szwajcarski</MenuItem>
+                <MenuItem value="manual">Ręczny</MenuItem>
+              </Select>
+            </FormControl>
+
             <TextField
               label="Opis (opcjonalny)"
               fullWidth
@@ -1898,20 +1954,20 @@ useEffect(() => {
           {tabValue === 1 && (
               <Box>
                   <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
-                      {/* Wybór formatu rozgrywek */}
-                      <FormControl sx={{ minWidth: 150 }} size="small">
-                          <InputLabel sx={{ color: "#ccc" }}>Format</InputLabel>
-                          <Select
-                              value={bracketType}
-                              onChange={(e) => setBracketType(e.target.value as "elimination" | "swiss" | "manual")}
-                              label="Format"
-                              sx={{ color: "#fff", "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.3)" } }}
-                          >
-                              <MenuItem value="elimination">Pucharowy</MenuItem>
-                              <MenuItem value="swiss">Szwajcarski</MenuItem>
-                              <MenuItem value="manual">ręczny</MenuItem>
-                          </Select>
-                      </FormControl>
+                      <Chip
+                        label={
+                          bracketType === "elimination"
+                            ? "System: pucharowy"
+                            : bracketType === "swiss"
+                              ? "System: szwajcarski"
+                              : "System: ręczny"
+                        }
+                        sx={{
+                          bgcolor: "rgba(255,106,0,0.15)",
+                          color: "#FF6A00",
+                          fontWeight: 700,
+                        }}
+                      />
 
                       {/* Opcje dla systemu pucharowego */}
                       {bracketType === "elimination" && (

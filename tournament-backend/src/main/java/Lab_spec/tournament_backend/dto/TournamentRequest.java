@@ -11,6 +11,7 @@ public class TournamentRequest {
     private String description;
     private String status;
     private Integer maxTeams;
+    private String bracketType;
 
     // Getters i Setters
     public String getName() { return name; }
@@ -36,4 +37,12 @@ public class TournamentRequest {
 
     public Integer getMaxTeams() { return maxTeams; }
     public void setMaxTeams(Integer maxTeams) { this.maxTeams = maxTeams; }
+
+    public String getBracketType() {
+        return bracketType;
+    }
+
+    public void setBracketType(String bracketType) {
+        this.bracketType = bracketType;
+    }
 }

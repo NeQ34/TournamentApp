@@ -95,6 +95,9 @@ public class TournamentService {
         tournament.setDescription(request.getDescription());
         tournament.setStatus(request.getStatus() != null ? request.getStatus() : "planned");
         tournament.setMaxTeams(request.getMaxTeams());
+        tournament.setBracketType(
+                request.getBracketType() != null ? request.getBracketType() : "auto"
+        );
 
         Tournament savedTournament = tournamentRepository.save(tournament);
         return convertToResponse(savedTournament);
@@ -137,6 +140,10 @@ public class TournamentService {
 
         if (request.getMaxTeams() != null) {
             tournament.setMaxTeams(request.getMaxTeams());
+        }
+
+        if (request.getBracketType() != null) {
+            tournament.setBracketType(request.getBracketType());
         }
 
         Tournament updatedTournament = tournamentRepository.save(tournament);
