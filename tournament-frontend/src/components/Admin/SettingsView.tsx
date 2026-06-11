@@ -22,12 +22,45 @@ import {
     InfoOutlined as InfoIcon,
 } from "@mui/icons-material";
 
-import type { AppSettings } from "../../utils/appSettings";
-import {
-    DEFAULT_SETTINGS,
-    getAppSettings,
-    saveAppSettings,
-} from "../../utils/appSettings";
+type AppSettings = {
+    organizationName: string;
+    defaultLocation: string;
+    defaultCourts: number;
+    defaultStartHour: number;
+    defaultMatchDuration: number;
+    defaultBreakBetweenMatches: number;
+
+    compactTables: boolean;
+    autoRefreshData: boolean;
+    dateFormat: "pl" | "iso";
+    rowsPerPage: 5 | 10 | 25 | 50;
+
+    sessionTimeoutMinutes: number;
+    requireStrongPassword: boolean;
+    confirmDangerousActions: boolean;
+
+    lastSavedAt?: string;
+};
+
+const DEFAULT_SETTINGS: AppSettings = {
+    organizationName: "SPORTTURNIEJE",
+    defaultLocation: "",
+    defaultCourts: 1,
+    defaultStartHour: 10,
+    defaultMatchDuration: 60,
+    defaultBreakBetweenMatches: 15,
+
+    compactTables: false,
+    autoRefreshData: true,
+    dateFormat: "pl",
+    rowsPerPage: 10,
+
+    sessionTimeoutMinutes: 60,
+    requireStrongPassword: true,
+    confirmDangerousActions: true,
+
+    lastSavedAt: undefined,
+};
 
 const STORAGE_KEY = "app_settings";
 
@@ -37,7 +70,17 @@ const SettingsView = () => {
     const [success, setSuccess] = useState("");
 
     useEffect(() => {
-        setSettings(getAppSettings());
+        const saved = localStorage.getItem(STORAGE_KEY);
+
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+            } catch {
+                localStorage.removeItem(STORAGE_KEY);
+                setSettings(DEFAULT_SETTINGS);
+            }
+        }
     }, []);
 
     const validateSettings = () => {
@@ -80,7 +123,7 @@ const SettingsView = () => {
             lastSavedAt: new Date().toISOString(),
         };
 
-        saveAppSettings(settingsToSave);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settingsToSave));
         setSettings(settingsToSave);
         setSuccess("Ustawienia zostały zapisane.");
 
@@ -89,7 +132,7 @@ const SettingsView = () => {
 
     const handleReset = () => {
         setSettings(DEFAULT_SETTINGS);
-        saveAppSettings(DEFAULT_SETTINGS);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS));
         setError("");
         setSuccess("Przywrócono ustawienia domyślne.");
 

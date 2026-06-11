@@ -49,7 +49,6 @@ import {
   EmojiEvents as EmojiEventsIcon,
 } from "@mui/icons-material";
 import autoTable from "jspdf-autotable";
-import { getAppSettings, formatAppDate } from "../../utils/appSettings";
 
 interface Tournament {
   id: number;
@@ -100,15 +99,7 @@ const TournamentsManagement = () => {
   const [tournamentToDelete, setTournamentToDelete] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(() => getAppSettings().rowsPerPage);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRowsPerPage(getAppSettings().rowsPerPage);
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, []);
-
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [editingTimeMatch, setEditingTimeMatch] = useState<Match | null>(null);
   const [tempTime, setTempTime] = useState("");
   const getSavedAppSettings = () => {
@@ -126,8 +117,6 @@ const TournamentsManagement = () => {
   const [startHour, setStartHour] = useState(savedSettings?.defaultStartHour || 10);
   const [matchDuration, setMatchDuration] = useState(savedSettings?.defaultMatchDuration || 60);
   const [breakBetweenMatches, setBreakBetweenMatches] = useState(savedSettings?.defaultBreakBetweenMatches || 15);
-  const appSettings = getAppSettings();
-  const tableSize = appSettings.compactTables ? "small" : "medium";
 
   // Formularz
   const [formData, setFormData] = useState({
@@ -1550,16 +1539,6 @@ const TournamentsManagement = () => {
     fetchDisciplines();
   }, []);
 
-useEffect(() => {
-  if (!getAppSettings().autoRefreshData) return;
-
-  const interval = setInterval(() => {
-    fetchTournaments();
-  }, 10000);
-
-  return () => clearInterval(interval);
-}, []);
-
   useEffect(() => {
     if (!dialogManageError && !dialogManageSuccess) return;
     const timer = setTimeout(() => {
@@ -1640,7 +1619,7 @@ useEffect(() => {
 
       {/* Tabela turniejów */}
       <TableContainer component={Paper} sx={{ bgcolor: "rgba(0,0,0,0.7)", borderRadius: 4 }}>
-        <Table size={tableSize}>
+        <Table>
           <TableHead>
             <TableRow sx={{ bgcolor: "rgba(255,106,0,0.1)" }}>
               <TableCell sx={{ color: "#FF6A00", fontWeight: 700 }}>Nazwa</TableCell>
@@ -1659,8 +1638,8 @@ useEffect(() => {
                   <TableCell sx={{ color: "#fff", fontWeight: 600 }}>{tournament.name}</TableCell>
                   <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>{tournament.discipline}</TableCell>
                   <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>
-                    {formatAppDate(tournament.startDate)}
-                    {tournament.endDate ? ` - ${formatAppDate(tournament.endDate)}` : ""}
+                    {tournament.startDate}
+                    {tournament.endDate && ` - ${tournament.endDate}`}
                   </TableCell>
                   <TableCell sx={{ color: "rgba(255,255,255,0.8)" }}>
                     {tournament.registeredTeamsCount || 0}
@@ -1679,15 +1658,8 @@ useEffect(() => {
                       </IconButton>
                       <IconButton
                         onClick={() => {
-                          if (getAppSettings().confirmDangerousActions) {
-                            setTournamentToDelete(tournament.id);
-                            setConfirmDeleteOpen(true);
-                          } else {
-                            setTournamentToDelete(tournament.id);
-                            setTimeout(() => {
-                              handleDeleteTournament();
-                            }, 0);
-                          }
+                          setTournamentToDelete(tournament.id);
+                          setConfirmDeleteOpen(true);
                         }}
                         sx={{ color: "#ff6b6b" }}
                         title="Usuń"
